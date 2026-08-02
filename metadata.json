@@ -1,0 +1,6 @@
+{
+  "name": "Dhani Finance",
+  "description": "Comprehensive, secure, and modern fintech loan management platform for Indian customers and admins.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
