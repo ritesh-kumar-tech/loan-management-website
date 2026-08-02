@@ -118,3 +118,4 @@ export const AuditLogsView: React.FC<AuditLogsViewProps> = ({ logs }) => {
     </div>
   );
 };
+

@@ -221,7 +221,7 @@ export const SupportTicketsView: React.FC<SupportTicketsViewProps> = ({
               <button
                 onClick={handleSendReply}
                 disabled={isSending || !replyText.trim()}
-                className="px-4 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-xl shadow-xs transition-all cursor-pointer shrink-0"
+                className="px-4 py-2.5 bg-blue-700 hover:bg-blue-800 text-white font-bold text-xs rounded-xl shadow-xs transition-all cursor-pointer shrink-0"
               >
                 <Send className="w-4 h-4" />
               </button>
@@ -232,3 +232,5 @@ export const SupportTicketsView: React.FC<SupportTicketsViewProps> = ({
     </div>
   );
 };
+
+

@@ -106,7 +106,7 @@ export const CustomerDashboard: React.FC<CustomerDashboardProps> = ({
 
         <button
           onClick={onStartNewApplication}
-          className="px-5 py-3 rounded-2xl bg-emerald-500 hover:bg-emerald-600 text-slate-950 font-bold text-xs uppercase tracking-wider transition-all shadow-md flex items-center gap-2 cursor-pointer shrink-0"
+          className="px-5 py-3 rounded-2xl bg-blue-700 hover:bg-blue-800 text-slate-950 font-bold text-xs uppercase tracking-wider transition-all shadow-md flex items-center gap-2 cursor-pointer shrink-0"
         >
           <Plus className="w-4 h-4" /> Apply for New Loan
         </button>
@@ -189,7 +189,7 @@ export const CustomerDashboard: React.FC<CustomerDashboardProps> = ({
 
               <button
                 onClick={() => setSelectedAccountForPayment(primaryLoan)}
-                className="px-6 py-3 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs uppercase tracking-wider transition-all shadow-md flex items-center gap-2 cursor-pointer shrink-0"
+                className="px-6 py-3 rounded-xl bg-blue-700 hover:bg-blue-800 text-white font-bold text-xs uppercase tracking-wider transition-all shadow-md flex items-center gap-2 cursor-pointer shrink-0"
               >
                 <CreditCard className="w-4 h-4" /> Pay EMI via UPI Now
               </button>
@@ -281,7 +281,7 @@ export const CustomerDashboard: React.FC<CustomerDashboardProps> = ({
                   {app.status === 'approved' && (
                     <button
                       onClick={() => generateSanctionLetter(app, settings)}
-                      className="px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-xs font-bold text-white flex items-center gap-1.5 cursor-pointer"
+                      className="px-3 py-1.5 rounded-lg bg-blue-700 hover:bg-blue-800 text-xs font-bold text-white flex items-center gap-1.5 cursor-pointer"
                     >
                       <Download className="w-3.5 h-3.5" /> Sanction Letter
                     </button>
@@ -307,7 +307,7 @@ export const CustomerDashboard: React.FC<CustomerDashboardProps> = ({
                   </div>
                   <button
                     onClick={() => setSelectedAccountForPayment(loan)}
-                    className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs cursor-pointer shadow-xs"
+                    className="px-4 py-2 rounded-xl bg-blue-700 hover:bg-blue-800 text-white font-bold text-xs cursor-pointer shadow-xs"
                   >
                     Pay EMI via UPI
                   </button>
@@ -542,3 +542,5 @@ export const CustomerDashboard: React.FC<CustomerDashboardProps> = ({
     </div>
   );
 };
+
+

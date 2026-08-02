@@ -117,3 +117,4 @@ export const PolicyPages: React.FC<PolicyPagesProps> = ({ type, settings }) => {
     </div>
   );
 };
+

@@ -87,7 +87,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
         <div className="flex items-center gap-2 shrink-0">
           <button 
             onClick={() => onNavigate('applications')}
-            className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs shadow-md transition-all flex items-center gap-1.5 cursor-pointer"
+            className="px-4 py-2 rounded-xl bg-blue-700 hover:bg-blue-600 text-white font-bold text-xs shadow-md transition-all flex items-center gap-1.5 cursor-pointer"
           >
             <PlusCircle className="w-4 h-4" /> Review Applications
           </button>
@@ -305,7 +305,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                     <div className="flex items-center gap-1.5">
                       <button
                         onClick={() => onVerifyPayment(p.id, 'approve')}
-                        className="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-[10px] rounded-md cursor-pointer"
+                        className="px-2.5 py-1 bg-blue-700 hover:bg-blue-800 text-white font-bold text-[10px] rounded-md cursor-pointer"
                       >
                         Approve
                       </button>
@@ -326,3 +326,4 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
     </div>
   );
 };
+

@@ -69,7 +69,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ settings, onClose, onUnava
             </button>
             <button
               onClick={handleDemoLogin}
-              className="py-2 px-3 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-[11px] cursor-pointer"
+              className="py-2 px-3 rounded-xl bg-blue-700 hover:bg-blue-800 text-white font-bold text-[11px] cursor-pointer"
             >
               Admin Portal
             </button>
@@ -160,3 +160,5 @@ export const AuthModal: React.FC<AuthModalProps> = ({ settings, onClose, onUnava
     </div>
   );
 };
+
+

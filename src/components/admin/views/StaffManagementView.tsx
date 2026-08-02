@@ -91,7 +91,7 @@ export const StaffManagementView: React.FC<StaffManagementViewProps> = ({
 
         <button
           onClick={openNewModal}
-          className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs flex items-center gap-1.5 shadow-xs cursor-pointer"
+          className="px-4 py-2 rounded-xl bg-blue-700 hover:bg-blue-800 text-white font-bold text-xs flex items-center gap-1.5 shadow-xs cursor-pointer"
         >
           <Plus className="w-4 h-4" /> Add Staff Officer
         </button>
@@ -231,7 +231,7 @@ export const StaffManagementView: React.FC<StaffManagementViewProps> = ({
                 </button>
                 <button
                   type="submit"
-                  className="px-4 py-2 rounded-xl bg-emerald-600 text-white font-bold text-xs hover:bg-emerald-700 cursor-pointer shadow-xs"
+                  className="px-4 py-2 rounded-xl bg-blue-700 text-white font-bold text-xs hover:bg-blue-800 cursor-pointer shadow-xs"
                 >
                   Create Staff Credentials
                 </button>
@@ -243,3 +243,6 @@ export const StaffManagementView: React.FC<StaffManagementViewProps> = ({
     </div>
   );
 };
+
+
+

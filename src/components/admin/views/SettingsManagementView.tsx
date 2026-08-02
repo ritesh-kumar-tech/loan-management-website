@@ -49,7 +49,7 @@ export const SettingsManagementView: React.FC<SettingsManagementViewProps> = ({
       <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-2xs flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
         <div>
           <h2 className="text-lg font-extrabold text-slate-900 flex items-center gap-2">
-            <Building2 className="w-5 h-5 text-emerald-600" /> NBFC Company & System Settings
+            <Building2 className="w-5 h-5 text-blue-700" /> NBFC Company & System Settings
           </h2>
           <p className="text-xs text-slate-500">Manage legal company entity metadata, official UPI collection VPAs, signatures, seals & statutory licenses.</p>
         </div>
@@ -57,15 +57,15 @@ export const SettingsManagementView: React.FC<SettingsManagementViewProps> = ({
         <button
           onClick={handleSubmit}
           disabled={isSaving}
-          className="px-5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-xs flex items-center gap-1.5 shadow-xs cursor-pointer"
+          className="px-5 py-2.5 rounded-xl bg-blue-700 hover:bg-blue-800 text-white font-extrabold text-xs flex items-center gap-1.5 shadow-xs cursor-pointer"
         >
           <Save className="w-4 h-4" /> {isSaving ? 'Saving...' : 'Save All Settings'}
         </button>
       </div>
 
       {saveSuccess && (
-        <div className="p-3 bg-emerald-100 border border-emerald-300 text-emerald-900 text-xs font-bold rounded-xl flex items-center gap-2 animate-in fade-in">
-          <CheckCircle2 className="w-4 h-4 text-emerald-700" /> System Settings & Official Legal Credentials Successfully Updated!
+        <div className="p-3 bg-blue-100 border border-blue-300 text-emerald-900 text-xs font-bold rounded-xl flex items-center gap-2 animate-in fade-in">
+          <CheckCircle2 className="w-4 h-4 text-blue-800" /> System Settings & Official Legal Credentials Successfully Updated!
         </div>
       )}
 
@@ -121,7 +121,7 @@ export const SettingsManagementView: React.FC<SettingsManagementViewProps> = ({
         {/* UPI Collection & Payment Gateway */}
         <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-2xs space-y-3">
           <h3 className="font-extrabold text-slate-900 border-b border-slate-100 pb-2 text-sm flex items-center gap-2">
-            <QrCode className="w-4 h-4 text-emerald-600" /> Official UPI Collection Gateway
+            <QrCode className="w-4 h-4 text-blue-700" /> Official UPI Collection Gateway
           </h3>
 
           <div>
@@ -130,7 +130,7 @@ export const SettingsManagementView: React.FC<SettingsManagementViewProps> = ({
               type="text"
               value={formData.upiId}
               onChange={(e) => handleChange('upiId', e.target.value)}
-              className="w-full p-2.5 rounded-xl border border-slate-200 font-mono font-bold text-emerald-700"
+              className="w-full p-2.5 rounded-xl border border-slate-200 font-mono font-bold text-blue-800"
             />
           </div>
 
@@ -222,3 +222,5 @@ export const SettingsManagementView: React.FC<SettingsManagementViewProps> = ({
     </div>
   );
 };
+
+

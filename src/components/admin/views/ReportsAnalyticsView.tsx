@@ -204,3 +204,4 @@ export const ReportsAnalyticsView: React.FC<ReportsAnalyticsViewProps> = ({
     </div>
   );
 };
+

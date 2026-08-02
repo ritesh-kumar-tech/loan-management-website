@@ -3,7 +3,7 @@ import { calculateEmi } from '../utils/calculator';
 
 export const defaultSettings: CompanySettings = {
   companyName: 'Dhani Finance',
-  tagline: 'Instant, Transparent & Secure Lending Solutions Across India',
+  tagline: 'Transparent and Secure Lending Solutions Across India',
   logoUrl: 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=120&h=120&fit=crop&auto=format',
   supportPhone: '+91 1800-209-8888',
   supportEmail: 'support@dhanifinance.in',
@@ -20,9 +20,15 @@ export const defaultSettings: CompanySettings = {
   registrationNumber: 'CIN: L65923HR2015PLC054892',
   nbfcLicenseInfo: 'RBI NBFC License No: B-14.03210',
   gstNumber: '06AABCD1234E1Z5',
-  primaryColor: '#0f172a', // Slate 900
-  secondaryColor: '#2563eb', // Blue 600
-  accentColor: '#16a34a', // Green 600
+  primaryColor: '#0B5ED7',
+  secondaryColor: '#1E88FF',
+  accentColor: '#16A36A',
+  deepBlue: '#073B8C',
+  navyBlue: '#071B3D',
+  lightBlue: '#EAF4FF',
+  backgroundColor: '#F6FAFF',
+  borderRadius: '16px',
+  animationsEnabled: true,
 };
 
 export const defaultUsers: User[] = [
@@ -52,11 +58,11 @@ export const defaultLoanProducts: LoanProduct[] = [
     type: 'personal',
     title: 'Personal Loan',
     tagline: 'Flexible personal funds for medical, travel, or weddings',
-    description: 'Instant collateral-free personal loans up to ₹15 Lakhs with minimal documentation and swift approval.',
+    description: 'Collateral-free personal loans up to ₹15 Lakhs with simple documentation and transparent eligibility review.',
     iconName: 'UserCheck',
     minAmount: 25000,
     maxAmount: 1500000,
-    minInterestRate: 11.49,
+    minInterestRate: 6,
     maxInterestRate: 18.0,
     minTenureMonths: 12,
     maxTenureMonths: 60,
@@ -78,8 +84,8 @@ export const defaultLoanProducts: LoanProduct[] = [
     iconName: 'Briefcase',
     minAmount: 100000,
     maxAmount: 5000000,
-    minInterestRate: 13.5,
-    maxInterestRate: 21.0,
+    minInterestRate: 6,
+    maxInterestRate: 20.0,
     minTenureMonths: 12,
     maxTenureMonths: 84,
     processingFeePercent: 2.0,
@@ -100,7 +106,7 @@ export const defaultLoanProducts: LoanProduct[] = [
     iconName: 'Home',
     minAmount: 500000,
     maxAmount: 10000000,
-    minInterestRate: 8.75,
+    minInterestRate: 6,
     maxInterestRate: 12.0,
     minTenureMonths: 60,
     maxTenureMonths: 300,
@@ -122,7 +128,7 @@ export const defaultLoanProducts: LoanProduct[] = [
     iconName: 'GraduationCap',
     minAmount: 50000,
     maxAmount: 2500000,
-    minInterestRate: 9.5,
+    minInterestRate: 6,
     maxInterestRate: 14.0,
     minTenureMonths: 24,
     maxTenureMonths: 120,
@@ -144,7 +150,7 @@ export const defaultLoanProducts: LoanProduct[] = [
     iconName: 'Car',
     minAmount: 50000,
     maxAmount: 3000000,
-    minInterestRate: 9.25,
+    minInterestRate: 6,
     maxInterestRate: 15.0,
     minTenureMonths: 12,
     maxTenureMonths: 84,
@@ -166,7 +172,7 @@ export const defaultLoanProducts: LoanProduct[] = [
     iconName: 'Building2',
     minAmount: 500000,
     maxAmount: 20000000,
-    minInterestRate: 10.5,
+    minInterestRate: 6,
     maxInterestRate: 16.0,
     minTenureMonths: 36,
     maxTenureMonths: 180,
@@ -549,15 +555,62 @@ export const defaultStaff: any[] = [
 ];
 
 export const defaultCmsContent: any = {
-  heroTitle: 'Instant & Transparent Digital Lending Across India',
-  heroTagline: 'Paperless, 100% RBI Compliant Loans Disbursed in Minutes',
-  heroSubtitle: 'Flexible Personal, Business & Home Loans with Low Interest Rates',
-  announcementBanner: '⚡ Festival Special: 0% Processing Fee on First Personal Loan Applications!',
+  heroTitle: 'Fast, Transparent and Reliable Loans for Your Financial Goals',
+  heroTagline: 'Regulated digital lending experience with clear eligibility review',
+  heroSubtitle: 'Explore flexible loan options with interest rates starting from 6% per annum, simple documentation, transparent EMI calculations, and secure online application tracking.',
+  announcementBanner: 'Interest rates start from 6% per annum. Final rates are subject to eligibility and lending policies.',
+  heroStartingRate: 6,
+  heroAmountRange: '₹25K - ₹2Cr',
+  heroTenure: '12 - 300 months',
+  interestRateDisclaimer: 'Interest rates start from 6% per annum. The final applicable rate depends on the selected loan product, applicant eligibility, verification, and internal lending policies.',
+  heroSlides: [
+    { id: 'hs_personal', title: 'Personal Loans Starting from 6%', description: 'Plan personal expenses with transparent EMI estimates and simple documentation.', ctaLabel: 'Apply Now', ctaTab: 'apply', imageUrl: 'https://images.unsplash.com/photo-1560472355-536de3962603?w=900&h=720&fit=crop&auto=format', alt: 'Professional applicant reviewing a secure loan application on a smartphone', displayOrder: 1, isActive: true },
+    { id: 'hs_business', title: 'Flexible Business Finance', description: 'Support working capital, inventory, and growth plans with structured repayment options.', ctaLabel: 'Explore Business Loan', ctaTab: 'loans', imageUrl: 'https://images.unsplash.com/photo-1554224155-6726b3ff858f?w=900&h=720&fit=crop&auto=format', alt: 'Small business owner reviewing finance documents', displayOrder: 2, isActive: true },
+    { id: 'hs_home', title: 'Plan Your Dream Home', description: 'Estimate long-tenure home finance with a product-specific rate range.', ctaLabel: 'Explore Home Loan', ctaTab: 'loans', imageUrl: 'https://images.unsplash.com/photo-1560518883-ce09059eeffa?w=900&h=720&fit=crop&auto=format', alt: 'Family home finance planning with documents and keys', displayOrder: 3, isActive: true },
+    { id: 'hs_docs', title: 'Simple Digital Documentation', description: 'Keep your identity, PAN, income, and bank documents ready before applying.', ctaLabel: 'View Required Documents', ctaTab: 'documents', imageUrl: 'https://images.unsplash.com/photo-1554224154-26032ffc0d07?w=900&h=720&fit=crop&auto=format', alt: 'Secure document checklist for online loan application', displayOrder: 4, isActive: true },
+    { id: 'hs_emi', title: 'Calculate Your EMI Instantly', description: 'Compare repayment schedules before submitting your application.', ctaLabel: 'Calculate EMI', ctaTab: 'calculator', imageUrl: 'https://images.unsplash.com/photo-1554224154-22dec7ec8818?w=900&h=720&fit=crop&auto=format', alt: 'Loan EMI calculation dashboard on a laptop', displayOrder: 5, isActive: true },
+  ],
+  promotionalSlides: [
+    { id: 'promo_personal', productId: 'prod_personal', title: 'Personal Loan from 6%', description: 'Flexible funds for planned personal expenses.', startingRate: 6, maxTenureMonths: 60, ctaLabel: 'Apply Now', imageUrl: 'https://images.unsplash.com/photo-1551836022-d5d88e9218df?w=700&h=520&fit=crop&auto=format', alt: 'Professional using phone for personal finance', displayOrder: 1, isActive: true },
+    { id: 'promo_business', productId: 'prod_business', title: 'Business Expansion Loan', description: 'Finance working capital, stock, and growth plans.', startingRate: 6, maxTenureMonths: 84, ctaLabel: 'Explore', imageUrl: 'https://images.unsplash.com/photo-1556740758-90de374c12ad?w=700&h=520&fit=crop&auto=format', alt: 'Business owner at a counter', displayOrder: 2, isActive: true },
+    { id: 'promo_home', productId: 'prod_home', title: 'Home Loan Solutions', description: 'Long-tenure housing finance with transparent EMIs.', startingRate: 6, maxTenureMonths: 300, ctaLabel: 'Explore', imageUrl: 'https://images.unsplash.com/photo-1564013799919-ab600027ffc6?w=700&h=520&fit=crop&auto=format', alt: 'Modern home exterior', displayOrder: 3, isActive: true },
+    { id: 'promo_vehicle', productId: 'prod_vehicle', title: 'Vehicle Finance', description: 'Plan two-wheeler, car, or commercial vehicle purchase.', startingRate: 6, maxTenureMonths: 84, ctaLabel: 'Explore', imageUrl: 'https://images.unsplash.com/photo-1549924231-f129b911e442?w=700&h=520&fit=crop&auto=format', alt: 'Vehicle finance customer with car keys', displayOrder: 4, isActive: true },
+    { id: 'promo_education', productId: 'prod_education', title: 'Education Loan', description: 'Support tuition and study-related expenses.', startingRate: 6, maxTenureMonths: 120, ctaLabel: 'Explore', imageUrl: 'https://images.unsplash.com/photo-1523240795612-9a054b0db644?w=700&h=520&fit=crop&auto=format', alt: 'Student reviewing education documents', displayOrder: 5, isActive: true },
+    { id: 'promo_lap', productId: 'prod_lap', title: 'Loan Against Property', description: 'Unlock property-backed finance with structured tenure.', startingRate: 6, maxTenureMonths: 180, ctaLabel: 'Explore', imageUrl: 'https://images.unsplash.com/photo-1560520653-9e0e4c89eb11?w=700&h=520&fit=crop&auto=format', alt: 'Property document and financial paperwork', displayOrder: 6, isActive: true },
+  ],
+  documentItems: [
+    { id: 'doc_photo', name: 'Passport Size Photograph', iconName: 'Image', description: 'Clear and recent photograph of the applicant.', formats: 'JPG, PNG, PDF', isRequired: true, displayOrder: 1, isActive: true },
+    { id: 'doc_identity', name: 'Aadhaar or Approved Identity Proof', iconName: 'IdCard', description: 'Clear identity proof. Do not share full Aadhaar publicly.', formats: 'JPG, PNG, PDF', isRequired: true, displayOrder: 2, isActive: true },
+    { id: 'doc_pan', name: 'PAN Card', iconName: 'BadgeIndianRupee', description: 'Clear front side of PAN card for financial verification.', formats: 'JPG, PNG, PDF', isRequired: true, displayOrder: 3, isActive: true },
+    { id: 'doc_bank', name: 'Bank Account Details', iconName: 'Landmark', description: 'Active bank account details in the applicant name.', formats: 'PDF, JPG, PNG', isRequired: true, displayOrder: 4, isActive: true },
+    { id: 'doc_address', name: 'Address Proof', iconName: 'MapPin', description: 'Current residential address proof when requested.', formats: 'PDF, JPG, PNG', isRequired: false, displayOrder: 5, isActive: true },
+    { id: 'doc_income', name: 'Income Documents', iconName: 'FileText', description: 'Salary slips, bank statements, ITR, or business registration as applicable.', formats: 'PDF preferred', isRequired: false, displayOrder: 6, isActive: true },
+  ],
+  trustItems: [
+    { id: 'trust_secure', iconName: 'ShieldCheck', title: 'Secure Data Handling', description: 'Application data is handled through controlled verification workflows.', displayOrder: 1, isActive: true },
+    { id: 'trust_review', iconName: 'ClipboardCheck', title: 'Transparent Eligibility Review', description: 'Loan terms are assessed against product and credit policies.', displayOrder: 2, isActive: true },
+    { id: 'trust_docs', iconName: 'FileCheck2', title: 'Digital Documentation', description: 'Upload and track required documents online.', displayOrder: 3, isActive: true },
+    { id: 'trust_support', iconName: 'Headphones', title: 'Customer Support', description: 'Get help for applications, receipts, and repayment queries.', displayOrder: 4, isActive: true },
+    { id: 'trust_emi', iconName: 'Calculator', title: 'EMI Transparency', description: 'Preview principal, interest, and total payable before applying.', displayOrder: 5, isActive: true },
+  ],
+  whyChooseTitle: 'Why Choose Our Loan Platform?',
+  whyChooseDescription: 'Understand your options, submit documents securely, and track every important stage through one simple digital platform.',
+  whyChooseItems: [
+    { id: 'why_clarity', iconName: 'Calculator', title: 'Better Loan Information and EMI Clarity', description: 'Review loan ranges, starting interest rates, repayment tenure, estimated EMI, and total payable amount before beginning your application.', displayOrder: 1, isActive: true },
+    { id: 'why_documents', iconName: 'ShieldCheck', title: 'Secure Digital Documentation', description: 'Upload required documents through a protected digital process and track their verification status from your account.', displayOrder: 2, isActive: true },
+    { id: 'why_tracking', iconName: 'TrendingUp', title: 'Application and Payment Tracking', description: 'Track application progress, document requests, EMI schedules, UPI payment submissions, payment verification, and generated receipts in one place.', displayOrder: 3, isActive: true },
+  ],
+  statistics: [
+    { id: 'stat_products', label: 'Loan Products Available', value: 6, suffix: '', iconName: 'Layers', isActive: true },
+    { id: 'stat_apps', label: 'Applications Processed', value: 2, suffix: '+', iconName: 'FileCheck2', isActive: true },
+    { id: 'stat_docs', label: 'Documents Verified', value: 5, suffix: '+', iconName: 'ShieldCheck', isActive: true },
+    { id: 'stat_support', label: 'Support Requests Resolved', value: 1, suffix: '+', iconName: 'Headphones', isActive: true },
+  ],
   faqs: [
     {
       id: 'faq_1',
       question: 'How fast is loan disbursement?',
-      answer: 'Once approved and agreement signed, funds are directly transferred via NEFT/IMPS within 30 minutes.',
+      answer: 'Once approved and agreement signed, funds are transferred to the verified bank account according to the approved sanction terms and banking timelines.',
       category: 'Disbursement',
     },
     {
@@ -570,11 +623,15 @@ export const defaultCmsContent: any = {
   testimonials: [
     {
       id: 't_1',
-      name: 'Aniket Verma',
+      name: 'Demo Customer',
+      firstName: 'Demo',
       loanType: 'Personal Loan',
       rating: 5,
-      comment: 'Super fast process! Got my personal loan sanctioned within 1 hour without visiting any branch.',
+      comment: 'Demo placeholder review. Publish real customer feedback only after admin approval.',
       city: 'Gurugram',
+      isVerified: false,
+      isPublished: true,
+      displayOrder: 1,
     }
   ],
   termsAndConditions: 'Official Terms and Conditions for Dhani Finance Limited...',
@@ -607,4 +664,3 @@ export const defaultEligibilityRules: any[] = [
     isActive: true,
   }
 ];
-

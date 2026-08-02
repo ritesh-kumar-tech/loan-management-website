@@ -1,126 +1,122 @@
 import React from 'react';
 import { CompanySettings } from '../../types';
-import { ShieldCheck, Phone, Mail, MapPin, ExternalLink, Lock } from 'lucide-react';
+import { ArrowUp, Clock, Lock, Mail, MapPin, Phone, ShieldCheck } from 'lucide-react';
 
 interface FooterProps {
   settings: CompanySettings;
   setActiveTab: (tab: string) => void;
 }
 
+const loanLinks = ['Personal Loan', 'Business Growth Loan', 'Home Housing Loan', 'Education Loan', 'Vehicle & Auto Finance', 'Loan Against Property'];
+const quickLinks = [
+  ['calculator', 'EMI Calculator'],
+  ['track', 'Track Application Status'],
+  ['verify', 'Verify Official Receipt'],
+  ['contact', 'Grievance Redressal'],
+  ['about', 'About Dhani Finance'],
+];
+const policies = [
+  ['policy_privacy', 'Privacy Policy'],
+  ['policy_terms', 'Terms & Conditions'],
+  ['policy_fair', 'Fair Practices Code'],
+  ['policy_grievance', 'Grievance Officer Policy'],
+  ['policy_lending', 'Responsible Lending'],
+  ['policy_refund', 'Refund & Cancellation'],
+];
+
 export const Footer: React.FC<FooterProps> = ({ settings, setActiveTab }) => {
+  const backToTop = () => window.scrollTo({ top: 0, behavior: 'smooth' });
+
   return (
-    <footer className="bg-slate-950 text-slate-300 pt-16 pb-12 border-t border-slate-800">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-10 mb-12">
-          
-          {/* Brand & Regulatory Info */}
-          <div className="lg:col-span-2 space-y-4">
+    <footer className="bg-[#030B1D] text-slate-300 pt-20 pb-10 border-t border-blue-950">
+      <div className="df-container">
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-5 gap-10 xl:gap-12 mb-12">
+          <div className="xl:col-span-2 space-y-6">
             <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-xl bg-emerald-500 text-slate-950 font-bold text-xl flex items-center justify-center">
+              <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-blue-600 to-sky-400 text-white font-black text-2xl flex items-center justify-center shadow-lg shadow-blue-950/30">
                 D
               </div>
               <div>
-                <span className="text-2xl font-bold text-white tracking-tight">{settings.companyName}</span>
-                <span className="block text-xs text-emerald-400 font-medium">Licensed Financial Institution</span>
+                <span className="text-2xl font-black text-white tracking-tight">{settings.companyName}</span>
+                <span className="block text-sm text-sky-300 font-semibold">Licensed Financial Institution</span>
               </div>
             </div>
 
-            <p className="text-sm text-slate-400 leading-relaxed pr-4">
-              {settings.companyName} is an authorized fintech lending partner delivering instant, paperless, and transparent financial credit products to retail borrowers, salaried professionals, and MSMEs across India.
+            <p className="text-[15px] text-slate-400 leading-relaxed max-w-xl">
+              {settings.companyName} provides transparent digital lending workflows for retail borrowers, salaried professionals, and MSMEs across India with secure application tracking and document verification.
             </p>
 
-            <div className="p-3.5 rounded-xl bg-slate-900 border border-slate-800 text-xs space-y-1.5 text-slate-300">
-              <div className="flex items-center gap-2 font-semibold text-emerald-400">
-                <ShieldCheck className="w-4 h-4" /> Regulatory Compliance Notice
+            <div className="rounded-[20px] bg-white/[0.04] border border-white/10 p-5 space-y-3 text-sm">
+              <div className="flex items-center gap-2 font-extrabold text-sky-300">
+                <ShieldCheck className="w-5 h-5" /> Regulatory Information
               </div>
-              <p className="text-slate-400">
-                {settings.nbfcLicenseInfo} | {settings.registrationNumber}
-              </p>
-              <p className="text-slate-400">
-                GSTIN: {settings.gstNumber}
-              </p>
+              <p className="text-slate-400">{settings.nbfcLicenseInfo}</p>
+              <p className="text-slate-400">{settings.registrationNumber}</p>
+              <p className="text-slate-400">GSTIN: {settings.gstNumber}</p>
             </div>
           </div>
 
-          {/* Loan Products Column */}
-          <div>
-            <h4 className="text-sm font-bold text-white uppercase tracking-wider mb-4">Loan Products</h4>
-            <ul className="space-y-2.5 text-sm text-slate-400">
-              <li><button onClick={() => setActiveTab('loans')} className="hover:text-emerald-400 transition-colors">Personal Loan</button></li>
-              <li><button onClick={() => setActiveTab('loans')} className="hover:text-emerald-400 transition-colors">Business Growth Loan</button></li>
-              <li><button onClick={() => setActiveTab('loans')} className="hover:text-emerald-400 transition-colors">Home Housing Loan</button></li>
-              <li><button onClick={() => setActiveTab('loans')} className="hover:text-emerald-400 transition-colors">Education Loan</button></li>
-              <li><button onClick={() => setActiveTab('loans')} className="hover:text-emerald-400 transition-colors">Vehicle & Auto Finance</button></li>
-              <li><button onClick={() => setActiveTab('loans')} className="hover:text-emerald-400 transition-colors">Loan Against Property</button></li>
-            </ul>
-          </div>
+          <FooterColumn title="Loan Products">
+            {loanLinks.map((label) => <FooterButton key={label} onClick={() => setActiveTab('loans')}>{label}</FooterButton>)}
+          </FooterColumn>
 
-          {/* Quick Links & Services */}
-          <div>
-            <h4 className="text-sm font-bold text-white uppercase tracking-wider mb-4">Quick Tools</h4>
-            <ul className="space-y-2.5 text-sm text-slate-400">
-              <li><button onClick={() => setActiveTab('calculator')} className="hover:text-emerald-400 transition-colors">EMI Calculator</button></li>
-              <li><button onClick={() => setActiveTab('track')} className="hover:text-emerald-400 transition-colors">Track Application Status</button></li>
-              <li><button onClick={() => setActiveTab('verify')} className="hover:text-emerald-400 transition-colors">Verify Official Receipt</button></li>
-              <li><button onClick={() => setActiveTab('contact')} className="hover:text-emerald-400 transition-colors">Grievance Redressal</button></li>
-              <li><button onClick={() => setActiveTab('about')} className="hover:text-emerald-400 transition-colors">About Dhani Finance</button></li>
-            </ul>
-          </div>
+          <FooterColumn title="Quick Tools">
+            {quickLinks.map(([tab, label]) => <FooterButton key={tab} onClick={() => setActiveTab(tab)}>{label}</FooterButton>)}
+          </FooterColumn>
 
-          {/* Legal Policies Column */}
-          <div>
-            <h4 className="text-sm font-bold text-white uppercase tracking-wider mb-4">Regulatory Policies</h4>
-            <ul className="space-y-2.5 text-sm text-slate-400">
-              <li><button onClick={() => setActiveTab('policy_privacy')} className="hover:text-emerald-400 transition-colors">Privacy Policy</button></li>
-              <li><button onClick={() => setActiveTab('policy_terms')} className="hover:text-emerald-400 transition-colors">Terms & Conditions</button></li>
-              <li><button onClick={() => setActiveTab('policy_fair')} className="hover:text-emerald-400 transition-colors">Fair Practices Code</button></li>
-              <li><button onClick={() => setActiveTab('policy_grievance')} className="hover:text-emerald-400 transition-colors">Grievance Officer Policy</button></li>
-              <li><button onClick={() => setActiveTab('policy_lending')} className="hover:text-emerald-400 transition-colors">Responsible Lending</button></li>
-              <li><button onClick={() => setActiveTab('policy_refund')} className="hover:text-emerald-400 transition-colors">Refund & Cancellation</button></li>
-            </ul>
-          </div>
+          <FooterColumn title="Policies">
+            {policies.map(([tab, label]) => <FooterButton key={tab} onClick={() => setActiveTab(tab)}>{label}</FooterButton>)}
+          </FooterColumn>
         </div>
 
-        {/* Contact Strip */}
-        <div className="py-6 border-t border-b border-slate-800 my-8 grid grid-cols-1 md:grid-cols-3 gap-6 text-xs text-slate-400">
-          <div className="flex items-start gap-3">
-            <MapPin className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
-            <div>
-              <strong className="text-slate-200 block">Registered Office:</strong>
-              {settings.registeredAddress}
-            </div>
-          </div>
-          <div className="flex items-start gap-3">
-            <Phone className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
-            <div>
-              <strong className="text-slate-200 block">Toll-Free Helpline:</strong>
-              {settings.supportPhone} (Mon-Sat, 9:30 AM - 6:30 PM)
-            </div>
-          </div>
-          <div className="flex items-start gap-3">
-            <Mail className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
-            <div>
-              <strong className="text-slate-200 block">Support & Grievance Desk:</strong>
-              {settings.supportEmail}
-            </div>
-          </div>
+        <div className="grid grid-cols-1 lg:grid-cols-4 gap-5 py-8 border-y border-white/10">
+          <Info icon={MapPin} title="Registered Office" text={settings.registeredAddress} />
+          <Info icon={Phone} title="Support Phone" text={`${settings.supportPhone} (Mon-Sat, 9:30 AM - 6:30 PM)`} />
+          <Info icon={Mail} title="Support Email" text={settings.supportEmail} />
+          <Info icon={Clock} title="Grievance Support" text="Use the Contact page for application, payment, and verification queries." />
         </div>
 
-        {/* Compliance Disclaimer (Mandatory) */}
-        <div className="bg-slate-900 p-4 rounded-xl text-xs text-slate-400 leading-relaxed mb-8 border border-slate-800">
-          <span className="font-bold text-amber-400 uppercase tracking-wide block mb-1">Mandatory Regulatory Disclaimer:</span>
-          Loan approval is subject to credit eligibility verification, document verification, internal lending policy checks, and applicable regulatory requirements. Dhani Finance does not charge any upfront cash fees or promise 100% guaranteed approvals without verification. All loan disbursements are made exclusively into the verified bank account of the primary borrower.
+        <div className="mt-8 rounded-[20px] bg-amber-400/10 p-5 text-sm text-slate-300 leading-relaxed border border-amber-300/20">
+          <span className="font-black text-amber-300 uppercase tracking-wide block mb-2">Mandatory Regulatory Disclaimer</span>
+          Loan approval is subject to credit eligibility verification, document verification, internal lending policy checks, and applicable regulatory requirements. Dhani Finance does not charge upfront cash fees or promise guaranteed approvals without verification. All loan disbursements are made into the verified bank account of the primary borrower.
         </div>
 
-        {/* Bottom Bar */}
-        <div className="flex flex-col sm:flex-row items-center justify-between text-xs text-slate-500 gap-4">
+        <div className="mt-8 flex flex-col sm:flex-row items-center justify-between text-sm text-slate-500 gap-4">
           <p>© 2026 {settings.companyName} Limited. All Rights Reserved.</p>
-          <div className="flex items-center gap-2 text-slate-400">
-            <Lock className="w-3.5 h-3.5 text-emerald-400" /> 256-Bit SSL Encrypted & Secure Portal
+          <div className="flex items-center gap-4">
+            <span className="flex items-center gap-2 text-slate-400"><Lock className="w-4 h-4 text-sky-300" /> Secure Portal</span>
+            <button onClick={backToTop} className="min-h-10 px-4 rounded-full bg-white/5 text-sky-300 font-bold inline-flex items-center gap-2 hover:bg-white/10">
+              Back to top <ArrowUp className="w-4 h-4" />
+            </button>
           </div>
         </div>
-
       </div>
     </footer>
   );
 };
+
+const FooterColumn: React.FC<{ title: string; children: React.ReactNode }> = ({ title, children }) => (
+  <div>
+    <h4 className="text-base font-black text-white mb-5">{title}</h4>
+    <ul className="space-y-3 text-[15px] text-slate-400">{children}</ul>
+  </div>
+);
+
+const FooterButton: React.FC<{ onClick: () => void; children: React.ReactNode }> = ({ onClick, children }) => (
+  <li>
+    <button onClick={onClick} className="hover:text-sky-300 transition-colors text-left min-h-7">
+      {children}
+    </button>
+  </li>
+);
+
+const Info: React.FC<{ icon: React.ElementType; title: string; text: string }> = ({ icon: Icon, title, text }) => (
+  <div className="rounded-2xl bg-white/[0.04] border border-white/10 p-5 flex items-start gap-3">
+    <Icon className="w-5 h-5 text-sky-300 shrink-0 mt-0.5" />
+    <div>
+      <strong className="text-white block text-sm">{title}</strong>
+      <span className="text-sm text-slate-400 leading-relaxed">{text}</span>
+    </div>
+  </div>
+);
+

@@ -183,7 +183,7 @@ export const PaymentVerificationView: React.FC<PaymentVerificationViewProps> = (
               </button>
               <button
                 onClick={() => handleAction('approve')}
-                className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs cursor-pointer shadow-xs"
+                className="px-4 py-2 rounded-xl bg-blue-700 hover:bg-blue-800 text-white font-bold text-xs cursor-pointer shadow-xs"
               >
                 Approve & Generate Receipt
               </button>
@@ -194,3 +194,5 @@ export const PaymentVerificationView: React.FC<PaymentVerificationViewProps> = (
     </div>
   );
 };
+
+

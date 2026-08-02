@@ -280,7 +280,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                       className={`
                         w-full flex items-center justify-between px-3 py-2 rounded-xl font-bold transition-all cursor-pointer text-left
                         ${isActive 
-                          ? 'bg-emerald-600 text-white shadow-md' 
+                          ? 'bg-blue-700 text-white shadow-md' 
                           : 'text-slate-400 hover:text-white hover:bg-slate-800'
                         }
                       `}
@@ -307,7 +307,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         {/* Sidebar Footer Controls */}
         <div className="p-4 border-t border-slate-800 bg-slate-950/50 flex items-center justify-between text-xs">
           <div className="flex items-center gap-2">
-            <div className="w-7 h-7 rounded-full bg-emerald-600 flex items-center justify-center font-bold text-white text-xs">
+            <div className="w-7 h-7 rounded-full bg-blue-700 flex items-center justify-center font-bold text-white text-xs">
               AD
             </div>
             <div className="leading-tight">
@@ -474,3 +474,5 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     </div>
   );
 };
+
+

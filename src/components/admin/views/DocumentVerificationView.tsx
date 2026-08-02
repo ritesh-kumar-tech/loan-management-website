@@ -158,7 +158,7 @@ export const DocumentVerificationView: React.FC<DocumentVerificationViewProps> =
               <div className="flex items-center gap-2">
                 <button
                   onClick={() => handleAction('verified')}
-                  className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs flex items-center gap-1.5 cursor-pointer shadow-xs"
+                  className="px-4 py-2 rounded-xl bg-blue-700 hover:bg-blue-800 text-white font-bold text-xs flex items-center gap-1.5 cursor-pointer shadow-xs"
                 >
                   <CheckCircle2 className="w-4 h-4" /> Approve Document
                 </button>
@@ -183,3 +183,5 @@ export const DocumentVerificationView: React.FC<DocumentVerificationViewProps> =
     </div>
   );
 };
+
+

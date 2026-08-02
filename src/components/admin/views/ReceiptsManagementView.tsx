@@ -56,7 +56,7 @@ export const ReceiptsManagementView: React.FC<ReceiptsManagementViewProps> = ({
           value={searchTerm}
           onChange={(e) => setSearchTerm(e.target.value)}
           placeholder="Search receipts by Receipt No (RCP-...), Borrower Name, UTR, or App ID..."
-          className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-slate-200 text-xs focus:ring-2 focus:ring-emerald-500 bg-white"
+          className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-slate-200 text-xs focus:ring-2 focus:ring-blue-500 bg-white"
         />
       </div>
 
@@ -111,3 +111,4 @@ export const ReceiptsManagementView: React.FC<ReceiptsManagementViewProps> = ({
     </div>
   );
 };
+

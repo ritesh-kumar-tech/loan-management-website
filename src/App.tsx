@@ -1,12 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import { api } from './services/api';
-import { CompanySettings, User, LoanProduct } from './types';
-import { defaultSettings } from './data/mockDatabase';
+import { CompanySettings, User, LoanProduct, CmsContent } from './types';
+import { defaultSettings, defaultCmsContent } from './data/mockDatabase';
 import { Header } from './components/layout/Header';
 import { Footer } from './components/layout/Footer';
 import { Hero } from './components/public/Hero';
 import { ProductCards } from './components/public/ProductCards';
 import { ProcessSteps } from './components/public/ProcessSteps';
+import { DocumentsAndTrust, EligibilityChecker, FloatingSupportAction, PromotionalCarousel, TestimonialStatsCta, WhyChooseUs } from './components/public/HomepageSections';
 import { EmiCalculator } from './components/calculator/EmiCalculator';
 import { StatusTracker } from './components/public/StatusTracker';
 import { ReceiptVerifier } from './components/public/ReceiptVerifier';
@@ -20,6 +21,7 @@ import { ShieldCheck, Phone, Mail, MapPin, Building2 } from 'lucide-react';
 
 export default function App() {
   const [settings, setSettings] = useState<CompanySettings>(defaultSettings);
+  const [cms, setCms] = useState<CmsContent>(defaultCmsContent);
   const [products, setProducts] = useState<LoanProduct[]>([]);
   const [user, setUser] = useState<User | null>(null);
   const [activeTab, setActiveTab] = useState<string>('home');
@@ -34,12 +36,14 @@ export default function App() {
   useEffect(() => {
     async function initData() {
       try {
-        const [s, p] = await Promise.all([
+        const [s, p, c] = await Promise.all([
           api.getSettings(),
           api.getLoanProducts(),
+          api.getCms(),
         ]);
         setSettings(s);
         setProducts(p);
+        setCms(c);
       } catch (e) {
         console.error('Failed to load initial settings', e);
       }
@@ -74,7 +78,7 @@ export default function App() {
   }
 
   return (
-    <div className="min-h-screen flex flex-col bg-slate-50 font-sans text-slate-800 antialiased selection:bg-emerald-500 selection:text-white">
+    <div className="min-h-screen flex flex-col bg-[#F6FAFF] font-sans text-slate-800 antialiased selection:bg-blue-600 selection:text-white">
       {/* Primary Header */}
       <Header
         settings={settings}
@@ -94,17 +98,37 @@ export default function App() {
           <div className="space-y-0">
             <Hero
               settings={settings}
+              cms={cms}
               onApplyNow={() => handleStartApplication()}
               onCalculateEmi={() => setActiveTab('calculator')}
+              onNavigate={setActiveTab}
             />
+            <PromotionalCarousel
+              cms={cms}
+              products={products}
+              onSelectProduct={(pId) => handleStartApplication(pId)}
+            />
+            <DocumentsAndTrust cms={cms} />
             <ProductCards
               products={products}
               onSelectProduct={(pId) => handleStartApplication(pId)}
             />
-            <ProcessSteps />
+            <WhyChooseUs cms={cms} onStartApplication={() => handleStartApplication()} />
+            <EligibilityChecker
+              products={products}
+              onContinue={(productId, amount) => handleStartApplication(productId, amount)}
+            />
+            <ProcessSteps onStartApplication={() => handleStartApplication()} />
             <EmiCalculator
               settings={settings}
+              products={products}
               onApplyWithValues={(amt) => handleStartApplication(undefined, amt)}
+            />
+            <TestimonialStatsCta
+              cms={cms}
+              onApplyNow={() => handleStartApplication()}
+              onCalculateEmi={() => setActiveTab('calculator')}
+              onTrack={() => setActiveTab('track')}
             />
             <FAQSection />
           </div>
@@ -124,6 +148,7 @@ export default function App() {
         {activeTab === 'calculator' && (
           <EmiCalculator
             settings={settings}
+            products={products}
             onApplyWithValues={(amt) => handleStartApplication(undefined, amt)}
           />
         )}
@@ -161,7 +186,7 @@ export default function App() {
         {activeTab === 'about' && (
           <div className="max-w-4xl mx-auto px-4 py-16 space-y-8 animate-fade-in">
             <div className="text-center max-w-xl mx-auto">
-              <span className="text-xs font-bold text-emerald-800 bg-emerald-100 px-3 py-1 rounded-full uppercase tracking-wider">
+              <span className="text-xs font-bold text-blue-800 bg-blue-100 px-3 py-1 rounded-full uppercase tracking-wider">
                 Corporate Identity
               </span>
               <h1 className="text-3xl font-extrabold text-slate-900 mt-3">About {settings.companyName}</h1>
@@ -176,7 +201,7 @@ export default function App() {
                 Equipped with cutting-edge automated underwriting technology, paperless KYC verification, and custom UPI repayment systems, we empower retail borrowers, salaried professionals, and MSME business owners with responsible financial solutions.
               </p>
               <div className="p-4 rounded-2xl bg-slate-900 text-white space-y-2 text-xs">
-                <div className="font-bold text-emerald-400">Licensed Financial Entity</div>
+                <div className="font-bold text-sky-300">Licensed Financial Entity</div>
                 <p>{settings.nbfcLicenseInfo} | GSTIN: {settings.gstNumber}</p>
                 <p>Registered Office: {settings.registeredAddress}</p>
               </div>
@@ -196,7 +221,7 @@ export default function App() {
 
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
               <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-xs text-center space-y-2">
-                <Phone className="w-8 h-8 text-emerald-600 mx-auto" />
+                <Phone className="w-8 h-8 text-blue-700 mx-auto" />
                 <h3 className="font-bold text-slate-900 text-sm">Helpline Phone</h3>
                 <p className="text-xs text-slate-600 font-semibold">{settings.supportPhone}</p>
               </div>
@@ -225,6 +250,7 @@ export default function App() {
 
       {/* Primary Footer */}
       <Footer settings={settings} setActiveTab={setActiveTab} />
+      <FloatingSupportAction settings={settings} />
 
       {/* Auth Modal */}
       {showAuthModal && (

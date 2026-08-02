@@ -191,7 +191,7 @@ export const LoanManagementView: React.FC<LoanManagementViewProps> = ({
                     setAdjustAmount(selectedLoan.monthlyEmi);
                     setShowAdjustModal(true);
                   }}
-                  className="px-3.5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs flex items-center gap-1.5 cursor-pointer shadow-xs"
+                  className="px-3.5 py-2 rounded-xl bg-blue-700 hover:bg-blue-800 text-white font-bold text-xs flex items-center gap-1.5 cursor-pointer shadow-xs"
                 >
                   <Plus className="w-4 h-4" /> Record Offline Payment
                 </button>
@@ -320,7 +320,7 @@ export const LoanManagementView: React.FC<LoanManagementViewProps> = ({
                 <button
                   type="button"
                   onClick={handleRecordOfflinePayment}
-                  className="px-4 py-2 rounded-xl bg-emerald-600 text-white font-bold text-xs hover:bg-emerald-700 cursor-pointer shadow-xs"
+                  className="px-4 py-2 rounded-xl bg-blue-700 text-white font-bold text-xs hover:bg-blue-800 cursor-pointer shadow-xs"
                 >
                   Confirm & Credit Account
                 </button>
@@ -332,3 +332,6 @@ export const LoanManagementView: React.FC<LoanManagementViewProps> = ({
     </div>
   );
 };
+
+
+

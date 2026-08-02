@@ -181,7 +181,7 @@ export const StepWizard: React.FC<StepWizardProps> = ({
         </div>
         <div className="w-full h-2 bg-slate-200 rounded-full overflow-hidden">
           <div
-            className="h-full bg-emerald-600 transition-all duration-300"
+            className="h-full bg-blue-700 transition-all duration-300"
             style={{ width: `${(currentStep / 8) * 100}%` }}
           />
         </div>
@@ -240,7 +240,7 @@ export const StepWizard: React.FC<StepWizardProps> = ({
                   step={10000}
                   value={amount}
                   onChange={(e) => setAmount(Number(e.target.value))}
-                  className="w-full mt-2 accent-emerald-600 cursor-pointer"
+                  className="w-full mt-2 accent-blue-700 cursor-pointer"
                 />
               </div>
 
@@ -605,7 +605,7 @@ export const StepWizard: React.FC<StepWizardProps> = ({
                   type="checkbox"
                   checked={termsAccepted}
                   onChange={(e) => setTermsAccepted(e.target.checked)}
-                  className="mt-0.5 rounded-sm border-slate-300 text-slate-900 accent-emerald-600"
+                  className="mt-0.5 rounded-sm border-slate-300 text-slate-900 accent-blue-700"
                 />
                 <span>I confirm that all information provided is accurate and true to the best of my knowledge. I agree to the Terms & Conditions and Privacy Policy of Dhani Finance.</span>
               </label>
@@ -615,7 +615,7 @@ export const StepWizard: React.FC<StepWizardProps> = ({
                   type="checkbox"
                   checked={creditCheckConsent}
                   onChange={(e) => setCreditCheckConsent(e.target.checked)}
-                  className="mt-0.5 rounded-sm border-slate-300 text-slate-900 accent-emerald-600"
+                  className="mt-0.5 rounded-sm border-slate-300 text-slate-900 accent-blue-700"
                 />
                 <span>I authorize Dhani Finance and its partner credit bureaus to fetch my credit information report for loan eligibility assessment.</span>
               </label>
@@ -662,7 +662,7 @@ export const StepWizard: React.FC<StepWizardProps> = ({
               {eligibilityResult && (
                 <button
                   onClick={() => generateProvisionalEligibilityLetter(createdApplication, settings)}
-                  className="px-5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold flex items-center gap-2 cursor-pointer shadow-sm"
+                  className="px-5 py-2.5 rounded-xl bg-blue-700 hover:bg-blue-800 text-white text-xs font-bold flex items-center gap-2 cursor-pointer shadow-sm"
                 >
                   <Download className="w-4 h-4" /> Download Eligibility Letter
                 </button>
@@ -701,7 +701,7 @@ export const StepWizard: React.FC<StepWizardProps> = ({
               <button
                 onClick={handleFinalSubmit}
                 disabled={submitting || !termsAccepted || !creditCheckConsent}
-                className="px-6 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-bold flex items-center gap-1.5 cursor-pointer shadow-md disabled:opacity-50"
+                className="px-6 py-2.5 rounded-xl bg-blue-700 hover:bg-blue-800 text-white text-sm font-bold flex items-center gap-1.5 cursor-pointer shadow-md disabled:opacity-50"
               >
                 {submitting ? 'Submitting Application...' : 'Submit Loan Application'}
               </button>
@@ -712,3 +712,5 @@ export const StepWizard: React.FC<StepWizardProps> = ({
     </div>
   );
 };
+
+

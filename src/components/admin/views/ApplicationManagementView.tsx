@@ -397,7 +397,7 @@ export const ApplicationManagementView: React.FC<ApplicationManagementViewProps>
                     <div className="flex items-center gap-1">
                       <button
                         onClick={() => handleDocVerify(doc.id, 'verified')}
-                        className="px-2.5 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-[10px] cursor-pointer"
+                        className="px-2.5 py-1 rounded-lg bg-blue-700 hover:bg-blue-800 text-white font-bold text-[10px] cursor-pointer"
                       >
                         Verify
                       </button>
@@ -461,7 +461,7 @@ export const ApplicationManagementView: React.FC<ApplicationManagementViewProps>
                   <button
                     onClick={handleApprove}
                     disabled={isActionLoading}
-                    className="w-full sm:w-auto px-5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-extrabold text-xs shadow-md transition-all cursor-pointer flex items-center justify-center gap-1.5"
+                    className="w-full sm:w-auto px-5 py-2.5 rounded-xl bg-blue-700 hover:bg-blue-600 text-white font-extrabold text-xs shadow-md transition-all cursor-pointer flex items-center justify-center gap-1.5"
                   >
                     <CheckCircle2 className="w-4 h-4" /> Approve & Sanction Loan
                   </button>
@@ -488,3 +488,5 @@ export const ApplicationManagementView: React.FC<ApplicationManagementViewProps>
     </div>
   );
 };
+
+

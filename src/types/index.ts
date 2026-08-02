@@ -297,6 +297,12 @@ export interface CompanySettings {
   primaryColor: string;
   secondaryColor: string;
   accentColor: string;
+  deepBlue?: string;
+  navyBlue?: string;
+  lightBlue?: string;
+  backgroundColor?: string;
+  borderRadius?: string;
+  animationsEnabled?: boolean;
 }
 
 export interface AuditLog {
@@ -348,16 +354,98 @@ export interface CmsFaqItem {
 export interface CmsTestimonial {
   id: string;
   name: string;
+  firstName?: string;
   loanType: string;
   rating: number;
   comment: string;
   city: string;
+  avatarUrl?: string;
+  isVerified?: boolean;
+  isPublished?: boolean;
+  displayOrder?: number;
+}
+
+export interface CmsHeroSlide {
+  id: string;
+  title: string;
+  description: string;
+  ctaLabel: string;
+  ctaTab?: string;
+  imageUrl: string;
+  alt: string;
+  displayOrder: number;
+  isActive: boolean;
+}
+
+export interface CmsPromoSlide {
+  id: string;
+  productId?: string;
+  title: string;
+  description: string;
+  startingRate: number;
+  maxTenureMonths: number;
+  ctaLabel: string;
+  imageUrl: string;
+  alt: string;
+  displayOrder: number;
+  isActive: boolean;
+}
+
+export interface CmsDocumentItem {
+  id: string;
+  name: string;
+  iconName: string;
+  description: string;
+  formats: string;
+  isRequired: boolean;
+  productTypes?: string[];
+  displayOrder: number;
+  isActive: boolean;
+}
+
+export interface CmsTrustItem {
+  id: string;
+  iconName: string;
+  title: string;
+  description: string;
+  displayOrder: number;
+  isActive: boolean;
+}
+
+export interface CmsWhyChooseItem {
+  id: string;
+  iconName: string;
+  title: string;
+  description: string;
+  displayOrder: number;
+  isActive: boolean;
+}
+
+export interface CmsStatistic {
+  id: string;
+  label: string;
+  value: number;
+  suffix?: string;
+  iconName: string;
+  isActive: boolean;
 }
 
 export interface CmsContent {
   heroTitle: string;
   heroTagline: string;
   heroSubtitle: string;
+  heroStartingRate?: number;
+  heroAmountRange?: string;
+  heroTenure?: string;
+  heroSlides?: CmsHeroSlide[];
+  promotionalSlides?: CmsPromoSlide[];
+  documentItems?: CmsDocumentItem[];
+  trustItems?: CmsTrustItem[];
+  whyChooseTitle?: string;
+  whyChooseDescription?: string;
+  whyChooseItems?: CmsWhyChooseItem[];
+  statistics?: CmsStatistic[];
+  interestRateDisclaimer?: string;
   announcementBanner: string;
   faqs: CmsFaqItem[];
   testimonials: CmsTestimonial[];
@@ -378,4 +466,3 @@ export interface EligibilityRule {
   customerMessage: string;
   isActive: boolean;
 }
-

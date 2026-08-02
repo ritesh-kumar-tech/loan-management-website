@@ -142,7 +142,7 @@ export const CustomerManagementView: React.FC<CustomerManagementViewProps> = ({
           </button>
           <button
             onClick={() => setShowAddModal(true)}
-            className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs flex items-center gap-1.5 shadow-xs transition-all cursor-pointer"
+            className="px-4 py-2 rounded-xl bg-blue-700 hover:bg-blue-800 text-white font-bold text-xs flex items-center gap-1.5 shadow-xs transition-all cursor-pointer"
           >
             <Plus className="w-4 h-4" /> Add Customer
           </button>
@@ -158,7 +158,7 @@ export const CustomerManagementView: React.FC<CustomerManagementViewProps> = ({
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
             placeholder="Search by customer name, email, phone, or PAN..."
-            className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-slate-200 text-xs focus:ring-2 focus:ring-emerald-500 focus:outline-none bg-white"
+            className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-slate-200 text-xs focus:ring-2 focus:ring-blue-500 focus:outline-none bg-white"
           />
         </div>
 
@@ -324,7 +324,7 @@ export const CustomerManagementView: React.FC<CustomerManagementViewProps> = ({
                 {selectedCustomer.kycStatus !== 'verified' && (
                   <button
                     onClick={() => handleToggleKyc(selectedCustomer, 'verified')}
-                    className="px-3.5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs flex items-center gap-1.5 cursor-pointer"
+                    className="px-3.5 py-2 rounded-xl bg-blue-700 hover:bg-blue-800 text-white font-bold text-xs flex items-center gap-1.5 cursor-pointer"
                   >
                     <UserCheck className="w-4 h-4" /> Mark KYC Verified
                   </button>
@@ -379,7 +379,7 @@ export const CustomerManagementView: React.FC<CustomerManagementViewProps> = ({
                   value={newFullName}
                   onChange={(e) => setNewFullName(e.target.value)}
                   placeholder="e.g. Rahul Sharma"
-                  className="w-full p-2.5 rounded-xl border border-slate-200 text-xs focus:ring-2 focus:ring-emerald-500"
+                  className="w-full p-2.5 rounded-xl border border-slate-200 text-xs focus:ring-2 focus:ring-blue-500"
                 />
               </div>
 
@@ -392,7 +392,7 @@ export const CustomerManagementView: React.FC<CustomerManagementViewProps> = ({
                     value={newEmail}
                     onChange={(e) => setNewEmail(e.target.value)}
                     placeholder="rahul@example.com"
-                    className="w-full p-2.5 rounded-xl border border-slate-200 text-xs focus:ring-2 focus:ring-emerald-500"
+                    className="w-full p-2.5 rounded-xl border border-slate-200 text-xs focus:ring-2 focus:ring-blue-500"
                   />
                 </div>
                 <div>
@@ -403,7 +403,7 @@ export const CustomerManagementView: React.FC<CustomerManagementViewProps> = ({
                     value={newMobile}
                     onChange={(e) => setNewMobile(e.target.value)}
                     placeholder="9876543210"
-                    className="w-full p-2.5 rounded-xl border border-slate-200 text-xs focus:ring-2 focus:ring-emerald-500"
+                    className="w-full p-2.5 rounded-xl border border-slate-200 text-xs focus:ring-2 focus:ring-blue-500"
                   />
                 </div>
               </div>
@@ -416,7 +416,7 @@ export const CustomerManagementView: React.FC<CustomerManagementViewProps> = ({
                     value={newPan}
                     onChange={(e) => setNewPan(e.target.value)}
                     placeholder="ABCDE1234F"
-                    className="w-full p-2.5 rounded-xl border border-slate-200 text-xs font-mono uppercase focus:ring-2 focus:ring-emerald-500"
+                    className="w-full p-2.5 rounded-xl border border-slate-200 text-xs font-mono uppercase focus:ring-2 focus:ring-blue-500"
                   />
                 </div>
                 <div>
@@ -426,7 +426,7 @@ export const CustomerManagementView: React.FC<CustomerManagementViewProps> = ({
                     value={newCity}
                     onChange={(e) => setNewCity(e.target.value)}
                     placeholder="Gurugram"
-                    className="w-full p-2.5 rounded-xl border border-slate-200 text-xs focus:ring-2 focus:ring-emerald-500"
+                    className="w-full p-2.5 rounded-xl border border-slate-200 text-xs focus:ring-2 focus:ring-blue-500"
                   />
                 </div>
               </div>
@@ -441,7 +441,7 @@ export const CustomerManagementView: React.FC<CustomerManagementViewProps> = ({
                 </button>
                 <button
                   type="submit"
-                  className="px-4 py-2 rounded-xl bg-emerald-600 text-white font-bold text-xs hover:bg-emerald-700 cursor-pointer shadow-xs"
+                  className="px-4 py-2 rounded-xl bg-blue-700 text-white font-bold text-xs hover:bg-blue-800 cursor-pointer shadow-xs"
                 >
                   Save Customer
                 </button>
@@ -453,3 +453,6 @@ export const CustomerManagementView: React.FC<CustomerManagementViewProps> = ({
     </div>
   );
 };
+
+
+

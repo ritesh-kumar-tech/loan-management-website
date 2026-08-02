@@ -146,3 +146,4 @@ export const ReceiptVerifier: React.FC<ReceiptVerifierProps> = ({ settings }) =>
     </div>
   );
 };
+

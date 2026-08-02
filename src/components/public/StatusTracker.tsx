@@ -174,7 +174,7 @@ export const StatusTracker: React.FC<StatusTrackerProps> = ({ settings }) => {
             {application.status === 'approved' && (
               <button
                 onClick={() => generateSanctionLetter(application, settings)}
-                className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold transition-colors flex items-center gap-2 cursor-pointer shadow-sm"
+                className="px-4 py-2 rounded-xl bg-blue-700 hover:bg-blue-800 text-white text-xs font-bold transition-colors flex items-center gap-2 cursor-pointer shadow-sm"
               >
                 <Download className="w-3.5 h-3.5" /> Download Official Sanction Letter
               </button>
@@ -185,3 +185,5 @@ export const StatusTracker: React.FC<StatusTrackerProps> = ({ settings }) => {
     </div>
   );
 };
+
+

@@ -1,1 +1,190 @@
 @import "tailwindcss";
+
+:root {
+  --df-primary: #0b5ed7;
+  --df-primary-strong: #073b8c;
+  --df-navy: #071b3d;
+  --df-accent: #1e88ff;
+  --df-surface: #ffffff;
+  --df-soft: #f6faff;
+  --df-soft-blue: #eaf4ff;
+  --df-text: #10213a;
+  --df-muted: #64748b;
+  --df-success: #16a36a;
+  --df-warning: #f59e0b;
+  --df-error: #dc3545;
+  --df-radius: 18px;
+  --df-shadow-sm: 0 10px 30px rgba(7, 27, 61, 0.07);
+  --df-shadow-md: 0 20px 55px rgba(7, 27, 61, 0.12);
+  --z-base: 0;
+  --z-card: 1;
+  --z-sticky-tools: 20;
+  --z-navbar: 40;
+  --z-dropdown: 50;
+  --z-floating: 60;
+  --z-drawer: 80;
+  --z-modal-backdrop: 90;
+  --z-modal: 100;
+  --z-toast: 110;
+}
+
+html {
+  scroll-behavior: smooth;
+  overflow-x: hidden;
+}
+
+body {
+  margin: 0;
+  color: var(--df-text);
+  background: var(--df-soft);
+  font-family: Inter, Manrope, "Plus Jakarta Sans", ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+button,
+a,
+input,
+select,
+textarea {
+  font: inherit;
+}
+
+button,
+a,
+input,
+select,
+textarea {
+  outline-color: var(--df-primary);
+}
+
+.df-container {
+  width: min(100% - 32px, 1320px);
+  margin-inline: auto;
+}
+
+.df-section {
+  padding-block: clamp(56px, 7vw, 104px);
+}
+
+.df-section-sm {
+  padding-block: clamp(44px, 5vw, 72px);
+}
+
+.df-eyebrow {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 30px;
+  padding: 6px 12px;
+  border-radius: 999px;
+  background: var(--df-soft-blue);
+  color: var(--df-primary-strong);
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0;
+  text-transform: uppercase;
+}
+
+.df-heading {
+  color: #071b3d;
+  font-weight: 900;
+  letter-spacing: 0;
+  line-height: 1.12;
+  font-size: clamp(28px, 4vw, 42px);
+}
+
+.df-copy {
+  color: var(--df-muted);
+  font-size: clamp(14px, 1.3vw, 16px);
+  line-height: 1.75;
+}
+
+.df-card {
+  background: var(--df-surface);
+  border: 1px solid rgba(11, 94, 215, 0.12);
+  border-radius: var(--df-radius);
+  box-shadow: var(--df-shadow-sm);
+}
+
+.df-card-hover {
+  transition: transform 180ms ease, box-shadow 180ms ease, border-color 180ms ease;
+}
+
+.df-card-hover:hover {
+  transform: translateY(-4px);
+  border-color: rgba(11, 94, 215, 0.35);
+  box-shadow: var(--df-shadow-md);
+}
+
+.df-btn {
+  min-height: 48px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  border-radius: 14px;
+  padding: 0 20px;
+  font-size: 14px;
+  font-weight: 800;
+  transition: transform 160ms ease, box-shadow 160ms ease, background-color 160ms ease, border-color 160ms ease;
+}
+
+.df-btn:hover {
+  transform: translateY(-1px);
+}
+
+.df-btn-primary {
+  background: linear-gradient(135deg, var(--df-primary), var(--df-accent));
+  color: white;
+  box-shadow: 0 14px 30px rgba(11, 94, 215, 0.24);
+}
+
+.df-btn-secondary {
+  background: white;
+  color: var(--df-primary-strong);
+  border: 1px solid rgba(11, 94, 215, 0.22);
+}
+
+.df-range {
+  height: 12px;
+  border-radius: 999px;
+  background: linear-gradient(90deg, rgba(11, 94, 215, 0.18), rgba(30, 136, 255, 0.28));
+  accent-color: var(--df-primary);
+}
+
+@keyframes fadeUp {
+  from {
+    opacity: 0;
+    transform: translateY(16px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@media (max-width: 640px) {
+  .df-container {
+    width: min(100% - 32px, 1320px);
+  }
+
+  .df-btn {
+    width: 100%;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    scroll-behavior: auto !important;
+    transition-duration: 0.01ms !important;
+  }
+}

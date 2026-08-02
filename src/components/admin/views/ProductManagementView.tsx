@@ -32,7 +32,7 @@ export const ProductManagementView: React.FC<ProductManagementViewProps> = ({
   const [pTagline, setPTagline] = useState('');
   const [pMinAmt, setPMinAmt] = useState(20000);
   const [pMaxAmt, setPMaxAmt] = useState(500000);
-  const [pMinRate, setPMinRate] = useState(10.5);
+  const [pMinRate, setPMinRate] = useState(6);
   const [pMaxRate, setPMaxRate] = useState(18.0);
   const [pMinTenure, setPMinTenure] = useState(6);
   const [pMaxTenure, setPMaxTenure] = useState(36);
@@ -48,7 +48,7 @@ export const ProductManagementView: React.FC<ProductManagementViewProps> = ({
     setPTagline(prod.tagline);
     setPMinAmt(prod.minAmount);
     setPMaxAmt(prod.maxAmount);
-    setPMinRate(prod.minRate ?? prod.minInterestRate ?? 10.5);
+    setPMinRate(Math.max(6, prod.minRate ?? prod.minInterestRate ?? 6));
     setPMaxRate(prod.maxRate ?? prod.maxInterestRate ?? 18.0);
     setPMinTenure(prod.minTenureMonths);
     setPMaxTenure(prod.maxTenureMonths);
@@ -66,7 +66,7 @@ export const ProductManagementView: React.FC<ProductManagementViewProps> = ({
     setPTagline('');
     setPMinAmt(20000);
     setPMaxAmt(500000);
-    setPMinRate(10.5);
+    setPMinRate(6);
     setPMaxRate(18.0);
     setPMinTenure(6);
     setPMaxTenure(36);
@@ -88,11 +88,13 @@ export const ProductManagementView: React.FC<ProductManagementViewProps> = ({
       maxAmount: Number(pMaxAmt),
       minRate: Number(pMinRate),
       maxRate: Number(pMaxRate),
+      minInterestRate: Number(pMinRate),
+      maxInterestRate: Number(pMaxRate),
       minTenureMonths: Number(pMinTenure),
       maxTenureMonths: Number(pMaxTenure),
       processingFeePercent: Number(pFee),
       isActive: editingProduct ? editingProduct.isActive : true,
-      features: editingProduct ? editingProduct.features : ['Instant Online Sanction', 'Zero Prepayment Penalty', 'Paperless KYC Verification'],
+      features: editingProduct ? editingProduct.features : ['Online Application Tracking', 'Transparent EMI Schedule', 'Paperless KYC Verification'],
       eligibility: {
         minIncome: Number(pMinIncome),
         minAge: Number(pMinAge),
@@ -119,7 +121,7 @@ export const ProductManagementView: React.FC<ProductManagementViewProps> = ({
 
         <button
           onClick={openNewModal}
-          className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs flex items-center gap-1.5 shadow-xs transition-all cursor-pointer"
+          className="px-4 py-2 rounded-xl bg-blue-700 hover:bg-blue-800 text-white font-bold text-xs flex items-center gap-1.5 shadow-xs transition-all cursor-pointer"
         >
           <Plus className="w-4 h-4" /> Add New Loan Product
         </button>
@@ -139,7 +141,7 @@ export const ProductManagementView: React.FC<ProductManagementViewProps> = ({
                   <p className="text-xs text-slate-500 leading-snug mt-0.5">{prod.tagline}</p>
                 </div>
                 <span className={`px-2 py-0.5 rounded-full font-bold uppercase text-[10px] ${
-                  prod.isActive ? 'bg-emerald-100 text-emerald-800' : 'bg-slate-100 text-slate-600'
+                  prod.isActive ? 'bg-blue-100 text-blue-900' : 'bg-slate-100 text-slate-600'
                 }`}>
                   {prod.isActive ? 'Active' : 'Disabled'}
                 </span>
@@ -153,7 +155,7 @@ export const ProductManagementView: React.FC<ProductManagementViewProps> = ({
                 </div>
                 <div>
                   <span className="text-slate-400 font-medium block text-[10px]">Interest Rate</span>
-                  <span className="font-bold text-emerald-700">{prod.minRate ?? prod.minInterestRate ?? 10.5}% – {prod.maxRate ?? prod.maxInterestRate ?? 18.0}% p.a.</span>
+                  <span className="font-bold text-blue-800">{prod.minRate ?? prod.minInterestRate ?? 6}% – {prod.maxRate ?? prod.maxInterestRate ?? 18.0}% p.a.</span>
                 </div>
                 <div>
                   <span className="text-slate-400 font-medium block text-[10px]">Tenure Range</span>
@@ -169,7 +171,7 @@ export const ProductManagementView: React.FC<ProductManagementViewProps> = ({
             <div className="pt-2 flex justify-end">
               <button
                 onClick={() => openEditModal(prod)}
-                className="w-full py-2 rounded-xl bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs flex items-center justify-center gap-1.5 cursor-pointer"
+                className="w-full py-2 rounded-xl bg-slate-900 hover:bg-blue-800 text-white font-bold text-xs flex items-center justify-center gap-1.5 cursor-pointer"
               >
                 <Edit3 className="w-3.5 h-3.5" /> Configure Scheme
               </button>
@@ -242,8 +244,9 @@ export const ProductManagementView: React.FC<ProductManagementViewProps> = ({
                   <input
                     type="number"
                     step="0.1"
+                    min={6}
                     value={pMinRate}
-                    onChange={(e) => setPMinRate(Number(e.target.value))}
+                    onChange={(e) => setPMinRate(Math.max(6, Number(e.target.value)))}
                     className="w-full p-2.5 rounded-xl border border-slate-200"
                   />
                 </div>
@@ -291,7 +294,7 @@ export const ProductManagementView: React.FC<ProductManagementViewProps> = ({
                 </button>
                 <button
                   type="submit"
-                  className="px-4 py-2 rounded-xl bg-emerald-600 text-white font-bold text-xs hover:bg-emerald-700 cursor-pointer shadow-xs"
+                  className="px-4 py-2 rounded-xl bg-blue-700 text-white font-bold text-xs hover:bg-blue-800 cursor-pointer shadow-xs"
                 >
                   Save Loan Scheme
                 </button>
@@ -303,3 +306,5 @@ export const ProductManagementView: React.FC<ProductManagementViewProps> = ({
     </div>
   );
 };
+
+

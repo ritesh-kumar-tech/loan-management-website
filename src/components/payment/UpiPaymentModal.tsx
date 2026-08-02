@@ -111,7 +111,7 @@ export const UpiPaymentModal: React.FC<UpiPaymentModalProps> = ({
             </div>
             <button
               onClick={handleCopyAmount}
-              className="px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold transition-all cursor-pointer flex items-center gap-1"
+              className="px-3 py-1.5 rounded-lg bg-blue-700 hover:bg-blue-800 text-white text-xs font-bold transition-all cursor-pointer flex items-center gap-1"
             >
               {copiedAmount ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
               {copiedAmount ? 'Copied' : 'Copy Amount'}
@@ -209,7 +209,7 @@ export const UpiPaymentModal: React.FC<UpiPaymentModalProps> = ({
             <button
               type="submit"
               disabled={submitting}
-              className="w-full py-3 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-sm transition-all shadow-md flex items-center justify-center gap-2 cursor-pointer"
+              className="w-full py-3 px-4 rounded-xl bg-blue-700 hover:bg-blue-800 text-white font-bold text-sm transition-all shadow-md flex items-center justify-center gap-2 cursor-pointer"
             >
               {submitting ? 'Submitting Payment Proof...' : <><FileCheck className="w-4 h-4" /> Submit Payment for Verification</>}
             </button>
@@ -223,3 +223,5 @@ export const UpiPaymentModal: React.FC<UpiPaymentModalProps> = ({
     </div>
   );
 };
+
+

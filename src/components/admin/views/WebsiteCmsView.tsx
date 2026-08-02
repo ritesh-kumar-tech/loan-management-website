@@ -26,6 +26,7 @@ export const WebsiteCmsView: React.FC<WebsiteCmsViewProps> = ({ onNotify }) => {
   const [heroTagline, setHeroTagline] = useState('');
   const [heroSubtitle, setHeroSubtitle] = useState('');
   const [announcementBanner, setAnnouncementBanner] = useState('');
+  const [cmsExtra, setCmsExtra] = useState<any>({});
 
   const [faqs, setFaqs] = useState<any[]>([]);
   const [testimonials, setTestimonials] = useState<any[]>([]);
@@ -43,9 +44,23 @@ export const WebsiteCmsView: React.FC<WebsiteCmsViewProps> = ({ onNotify }) => {
           setHeroTitle(cms.heroTitle || 'Instant Digital Lending Across India');
           setHeroTagline(cms.heroTagline || '100% RBI Compliant Loans');
           setHeroSubtitle(cms.heroSubtitle || 'Flexible Personal & Business Loans');
-          setAnnouncementBanner(cms.announcementBanner || '⚡ 0% Processing Fee Special Offer!');
+          setAnnouncementBanner(cms.announcementBanner || 'Interest rates start from 6% per annum. Final rates are subject to eligibility and lending policies.');
           setFaqs(cms.faqs || []);
           setTestimonials(cms.testimonials || []);
+          setCmsExtra({
+            heroStartingRate: cms.heroStartingRate || 6,
+            heroAmountRange: cms.heroAmountRange || '₹25K - ₹2Cr',
+            heroTenure: cms.heroTenure || '12 - 300 months',
+            heroSlides: cms.heroSlides || [],
+            promotionalSlides: cms.promotionalSlides || [],
+            documentItems: cms.documentItems || [],
+            trustItems: cms.trustItems || [],
+            whyChooseTitle: cms.whyChooseTitle || 'Why Choose Our Loan Platform?',
+            whyChooseDescription: cms.whyChooseDescription || 'Understand your options, submit documents securely, and track every important stage through one simple digital platform.',
+            whyChooseItems: cms.whyChooseItems || [],
+            statistics: cms.statistics || [],
+            interestRateDisclaimer: cms.interestRateDisclaimer || 'Interest rates start from 6% per annum. The final applicable rate depends on the selected loan product, applicant eligibility, verification, and internal lending policies.',
+          });
           setTerms(cms.termsAndConditions || '');
           setPrivacy(cms.privacyPolicy || '');
           setFairPractices(cms.fairPracticesCode || '');
@@ -69,6 +84,7 @@ export const WebsiteCmsView: React.FC<WebsiteCmsViewProps> = ({ onNotify }) => {
         heroTagline,
         heroSubtitle,
         announcementBanner,
+        ...cmsExtra,
         faqs,
         testimonials,
         termsAndConditions: terms,
@@ -105,6 +121,14 @@ export const WebsiteCmsView: React.FC<WebsiteCmsViewProps> = ({ onNotify }) => {
     setFaqs(faqs.map((f) => (f.id === id ? { ...f, [field]: val } : f)));
   };
 
+  const updateExtraJson = (field: string, value: string) => {
+    try {
+      setCmsExtra({ ...cmsExtra, [field]: JSON.parse(value) });
+    } catch {
+      onNotify?.(`Invalid JSON for ${field}`);
+    }
+  };
+
   const addTestimonial = () => {
     setTestimonials([
       ...testimonials,
@@ -113,8 +137,11 @@ export const WebsiteCmsView: React.FC<WebsiteCmsViewProps> = ({ onNotify }) => {
         name: 'Satisfied Customer',
         loanType: 'Personal Loan',
         rating: 5,
-        comment: 'Great experience getting quick disbursement!',
+        comment: 'Demo placeholder review. Replace with approved customer feedback.',
         city: 'New Delhi',
+        isVerified: false,
+        isPublished: false,
+        displayOrder: testimonials.length + 1,
       },
     ]);
   };
@@ -141,15 +168,15 @@ export const WebsiteCmsView: React.FC<WebsiteCmsViewProps> = ({ onNotify }) => {
         <button
           onClick={handleSave}
           disabled={isSaving}
-          className="px-5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-xs flex items-center gap-1.5 shadow-xs cursor-pointer"
+          className="px-5 py-2.5 rounded-xl bg-blue-700 hover:bg-blue-800 text-white font-extrabold text-xs flex items-center gap-1.5 shadow-xs cursor-pointer"
         >
           <Save className="w-4 h-4" /> {isSaving ? 'Saving...' : 'Publish Content Live'}
         </button>
       </div>
 
       {saveSuccess && (
-        <div className="p-3 bg-emerald-100 border border-emerald-300 text-emerald-900 text-xs font-bold rounded-xl flex items-center gap-2 animate-in fade-in">
-          <CheckCircle2 className="w-4 h-4 text-emerald-700" /> Website Content Successfully Published Live!
+        <div className="p-3 bg-blue-100 border border-blue-300 text-emerald-900 text-xs font-bold rounded-xl flex items-center gap-2 animate-in fade-in">
+          <CheckCircle2 className="w-4 h-4 text-blue-800" /> Website Content Successfully Published Live!
         </div>
       )}
 
@@ -166,7 +193,7 @@ export const WebsiteCmsView: React.FC<WebsiteCmsViewProps> = ({ onNotify }) => {
             onClick={() => setActiveTab(tab.id as any)}
             className={`px-4 py-2 rounded-xl transition-all cursor-pointer ${
               activeTab === tab.id
-                ? 'bg-slate-900 text-white font-bold'
+                ? 'bg-blue-700 text-white font-bold'
                 : 'text-slate-600 hover:bg-slate-100'
             }`}
           >
@@ -187,7 +214,7 @@ export const WebsiteCmsView: React.FC<WebsiteCmsViewProps> = ({ onNotify }) => {
                 type="text"
                 value={announcementBanner}
                 onChange={(e) => setAnnouncementBanner(e.target.value)}
-                placeholder="e.g. ⚡ Festival Special: 0% Processing Fee on First Personal Loan Applications!"
+                placeholder="Interest rates start from 6% per annum. Final rates are subject to eligibility and lending policies."
                 className="w-full p-2.5 rounded-xl border border-slate-200 font-medium"
               />
             </div>
@@ -209,7 +236,7 @@ export const WebsiteCmsView: React.FC<WebsiteCmsViewProps> = ({ onNotify }) => {
                 type="text"
                 value={heroTagline}
                 onChange={(e) => setHeroTagline(e.target.value)}
-                placeholder="100% RBI Compliant Loans Disbursed in Minutes"
+                placeholder="Regulated digital lending experience with clear eligibility review"
                 className="w-full p-2.5 rounded-xl border border-slate-200"
               />
             </div>
@@ -224,6 +251,88 @@ export const WebsiteCmsView: React.FC<WebsiteCmsViewProps> = ({ onNotify }) => {
                 className="w-full p-2.5 rounded-xl border border-slate-200"
               />
             </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+              <div>
+                <label className="block font-bold text-slate-700 mb-1">Starting Rate</label>
+                <input
+                  type="number"
+                  min={6}
+                  step="0.1"
+                  value={cmsExtra.heroStartingRate || 6}
+                  onChange={(e) => setCmsExtra({ ...cmsExtra, heroStartingRate: Math.max(6, Number(e.target.value)) })}
+                  className="w-full p-2.5 rounded-xl border border-slate-200"
+                />
+              </div>
+              <div>
+                <label className="block font-bold text-slate-700 mb-1">Loan Amount Range</label>
+                <input
+                  type="text"
+                  value={cmsExtra.heroAmountRange || ''}
+                  onChange={(e) => setCmsExtra({ ...cmsExtra, heroAmountRange: e.target.value })}
+                  className="w-full p-2.5 rounded-xl border border-slate-200"
+                />
+              </div>
+              <div>
+                <label className="block font-bold text-slate-700 mb-1">Tenure Label</label>
+                <input
+                  type="text"
+                  value={cmsExtra.heroTenure || ''}
+                  onChange={(e) => setCmsExtra({ ...cmsExtra, heroTenure: e.target.value })}
+                  className="w-full p-2.5 rounded-xl border border-slate-200"
+                />
+              </div>
+            </div>
+
+            <div>
+              <label className="block font-bold text-slate-700 mb-1">Interest Rate Disclaimer</label>
+              <textarea
+                value={cmsExtra.interestRateDisclaimer || ''}
+                onChange={(e) => setCmsExtra({ ...cmsExtra, interestRateDisclaimer: e.target.value })}
+                rows={2}
+                className="w-full p-2.5 rounded-xl border border-slate-200"
+              />
+            </div>
+
+            {[
+              ['heroSlides', 'Hero Slides'],
+              ['promotionalSlides', 'Promotional Carousel'],
+              ['documentItems', 'Required Documents'],
+              ['trustItems', 'Trust Strip'],
+              ['whyChooseItems', 'Why Choose Us'],
+              ['statistics', 'Statistics'],
+            ].map(([field, label]) => (
+              <div key={field}>
+                <label className="block font-bold text-slate-700 mb-1">{label} JSON</label>
+                <textarea
+                  defaultValue={JSON.stringify(cmsExtra[field] || [], null, 2)}
+                  onBlur={(e) => updateExtraJson(field, e.target.value)}
+                  rows={5}
+                  className="w-full p-2.5 rounded-xl border border-slate-200 font-mono text-[11px]"
+                />
+              </div>
+            ))}
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              <div>
+                <label className="block font-bold text-slate-700 mb-1">Why Choose Section Heading</label>
+                <input
+                  type="text"
+                  value={cmsExtra.whyChooseTitle || ''}
+                  onChange={(e) => setCmsExtra({ ...cmsExtra, whyChooseTitle: e.target.value })}
+                  className="w-full p-2.5 rounded-xl border border-slate-200"
+                />
+              </div>
+              <div>
+                <label className="block font-bold text-slate-700 mb-1">Why Choose Supporting Text</label>
+                <input
+                  type="text"
+                  value={cmsExtra.whyChooseDescription || ''}
+                  onChange={(e) => setCmsExtra({ ...cmsExtra, whyChooseDescription: e.target.value })}
+                  className="w-full p-2.5 rounded-xl border border-slate-200"
+                />
+              </div>
+            </div>
           </div>
         </div>
       )}
@@ -235,7 +344,7 @@ export const WebsiteCmsView: React.FC<WebsiteCmsViewProps> = ({ onNotify }) => {
             <h3 className="text-sm font-extrabold text-slate-900">Manage Frequently Asked Questions</h3>
             <button
               onClick={addFaq}
-              className="px-3.5 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs flex items-center gap-1 cursor-pointer"
+              className="px-3.5 py-1.5 rounded-xl bg-blue-700 hover:bg-blue-800 text-white font-bold text-xs flex items-center gap-1 cursor-pointer"
             >
               <Plus className="w-4 h-4" /> Add FAQ
             </button>
@@ -280,7 +389,7 @@ export const WebsiteCmsView: React.FC<WebsiteCmsViewProps> = ({ onNotify }) => {
             <h3 className="text-sm font-extrabold text-slate-900">Manage Customer Reviews & Testimonials</h3>
             <button
               onClick={addTestimonial}
-              className="px-3.5 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs flex items-center gap-1 cursor-pointer"
+              className="px-3.5 py-1.5 rounded-xl bg-blue-700 hover:bg-blue-800 text-white font-bold text-xs flex items-center gap-1 cursor-pointer"
             >
               <Plus className="w-4 h-4" /> Add Review
             </button>
@@ -313,6 +422,33 @@ export const WebsiteCmsView: React.FC<WebsiteCmsViewProps> = ({ onNotify }) => {
                   rows={2}
                   className="w-full p-2 rounded-xl border border-slate-200 text-xs"
                 />
+                <div className="grid grid-cols-2 gap-2">
+                  <input
+                    type="text"
+                    value={t.city || ''}
+                    onChange={(e) => setTestimonials(testimonials.map((item) => item.id === t.id ? { ...item, city: e.target.value } : item))}
+                    placeholder="City"
+                    className="p-2 rounded-xl border border-slate-200 text-xs"
+                  />
+                  <input
+                    type="number"
+                    min={1}
+                    max={5}
+                    value={t.rating || 5}
+                    onChange={(e) => setTestimonials(testimonials.map((item) => item.id === t.id ? { ...item, rating: Number(e.target.value) } : item))}
+                    className="p-2 rounded-xl border border-slate-200 text-xs"
+                  />
+                </div>
+                <div className="flex flex-wrap gap-3 text-[11px] font-bold text-slate-700">
+                  <label className="inline-flex items-center gap-1">
+                    <input type="checkbox" checked={!!t.isPublished} onChange={(e) => setTestimonials(testimonials.map((item) => item.id === t.id ? { ...item, isPublished: e.target.checked } : item))} />
+                    Publish
+                  </label>
+                  <label className="inline-flex items-center gap-1">
+                    <input type="checkbox" checked={!!t.isVerified} onChange={(e) => setTestimonials(testimonials.map((item) => item.id === t.id ? { ...item, isVerified: e.target.checked } : item))} />
+                    Verified customer
+                  </label>
+                </div>
               </div>
             ))}
           </div>
@@ -350,3 +486,5 @@ export const WebsiteCmsView: React.FC<WebsiteCmsViewProps> = ({ onNotify }) => {
     </div>
   );
 };
+
+
