@@ -4,6 +4,7 @@ import { LoanApplication, LoanAccount, PaymentSubmission, SupportTicket, Company
 import { formatINR, formatDate } from '../../utils/calculator';
 import { generateApplicationAcknowledgement, generateSanctionLetter, generateLoanAgreement, generateRepaymentSchedulePDF, generatePaymentReceiptPDF } from '../../utils/pdfGenerator';
 import { UpiPaymentModal } from '../payment/UpiPaymentModal';
+import { StatusBadge } from '../shared/StatusBadge';
 import { 
   LayoutDashboard, 
   FileText, 
@@ -208,9 +209,7 @@ export const CustomerDashboard: React.FC<CustomerDashboardProps> = ({
                     <span className="text-xs text-slate-400">Applied on {formatDate(app.createdAt)}</span>
                   </div>
                   <div className="flex items-center gap-3">
-                    <span className="px-3 py-1 rounded-full bg-emerald-100 text-emerald-800 text-xs font-bold uppercase">
-                      {app.status.replace('_', ' ')}
-                    </span>
+                    <StatusBadge status={app.status} />
                     <button
                       onClick={() => generateApplicationAcknowledgement(app, settings)}
                       className="p-2 rounded-lg bg-white border border-slate-200 text-slate-700 hover:bg-slate-100 cursor-pointer"
@@ -247,9 +246,7 @@ export const CustomerDashboard: React.FC<CustomerDashboardProps> = ({
                     <span className="text-xs font-bold text-slate-400 font-mono">{app.id}</span>
                     <h3 className="text-lg font-bold text-slate-900">{app.productTitle}</h3>
                   </div>
-                  <span className="px-3 py-1 rounded-full bg-emerald-100 text-emerald-800 text-xs font-bold uppercase">
-                    {app.status.replace('_', ' ')}
-                  </span>
+                  <StatusBadge status={app.status} />
                 </div>
 
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 text-xs">

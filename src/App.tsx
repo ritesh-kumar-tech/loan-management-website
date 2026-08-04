@@ -7,7 +7,7 @@ import { Footer } from './components/layout/Footer';
 import { Hero } from './components/public/Hero';
 import { ProductCards } from './components/public/ProductCards';
 import { ProcessSteps } from './components/public/ProcessSteps';
-import { DocumentsAndTrust, EligibilityChecker, FloatingSupportAction, PromotionalCarousel, TestimonialStatsCta, WhyChooseUs } from './components/public/HomepageSections';
+import { DocumentsAndTrust, FloatingSupportAction, PromotionalCarousel, TestimonialStatsCta, WhyChooseUs } from './components/public/HomepageSections';
 import { EmiCalculator } from './components/calculator/EmiCalculator';
 import { StatusTracker } from './components/public/StatusTracker';
 import { ReceiptVerifier } from './components/public/ReceiptVerifier';
@@ -29,6 +29,7 @@ export default function App() {
   // Wizard state
   const [selectedProductIdForWizard, setSelectedProductIdForWizard] = useState<string | undefined>(undefined);
   const [wizardInitialAmount, setWizardInitialAmount] = useState<number | undefined>(undefined);
+  const [wizardInitialTenure, setWizardInitialTenure] = useState<number | undefined>(undefined);
 
   // Auth modal
   const [showAuthModal, setShowAuthModal] = useState<boolean>(false);
@@ -51,15 +52,12 @@ export default function App() {
     initData();
   }, []);
 
-  const handleStartApplication = (productId?: string, amount?: number) => {
+  const handleStartApplication = (productId?: string, amount?: number, tenure?: number) => {
     if (productId) setSelectedProductIdForWizard(productId);
     if (amount) setWizardInitialAmount(amount);
+    if (tenure) setWizardInitialTenure(tenure);
     
-    if (!user) {
-      setShowAuthModal(true);
-    } else {
-      setActiveTab('apply');
-    }
+    setActiveTab('apply');
   };
 
   const handleLogout = () => {
@@ -98,8 +96,9 @@ export default function App() {
           <div className="space-y-0">
             <Hero
               settings={settings}
+              products={products}
               cms={cms}
-              onApplyNow={() => handleStartApplication()}
+              onApplyNow={(productId, amount, tenure) => handleStartApplication(productId, amount, tenure)}
               onCalculateEmi={() => setActiveTab('calculator')}
               onNavigate={setActiveTab}
             />
@@ -109,15 +108,7 @@ export default function App() {
               onSelectProduct={(pId) => handleStartApplication(pId)}
             />
             <DocumentsAndTrust cms={cms} />
-            <ProductCards
-              products={products}
-              onSelectProduct={(pId) => handleStartApplication(pId)}
-            />
             <WhyChooseUs cms={cms} onStartApplication={() => handleStartApplication()} />
-            <EligibilityChecker
-              products={products}
-              onContinue={(productId, amount) => handleStartApplication(productId, amount)}
-            />
             <ProcessSteps onStartApplication={() => handleStartApplication()} />
             <EmiCalculator
               settings={settings}
@@ -166,9 +157,10 @@ export default function App() {
             products={products}
             selectedProductId={selectedProductIdForWizard}
             initialAmount={wizardInitialAmount}
+            initialTenure={wizardInitialTenure}
             userId={user?.id || 'usr_guest'}
             userEmail={user?.email || 'guest@example.com'}
-            onComplete={() => setActiveTab('dashboard')}
+            onComplete={() => setActiveTab(user ? 'dashboard' : 'track')}
             onCancel={() => setActiveTab('home')}
           />
         )}
@@ -257,6 +249,11 @@ export default function App() {
         <AuthModal
           settings={settings}
           onClose={() => setShowAuthModal(false)}
+          onAuthenticated={(nextUser) => {
+            setUser(nextUser);
+            setShowAuthModal(false);
+            setActiveTab(nextUser.role === 'admin' ? 'admin' : 'dashboard');
+          }}
           onUnavailable={() => {
             setUser(null);
             setShowAuthModal(false);

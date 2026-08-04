@@ -33,6 +33,7 @@ export const api = {
       body: JSON.stringify({ email, password, role }),
     });
     const data = await res.json();
+    if (!res.ok || !data.user) throw new Error(data.error || 'Login failed');
     return data;
   },
 
@@ -43,6 +44,7 @@ export const api = {
       body: JSON.stringify({ fullName, email, mobile }),
     });
     const data = await res.json();
+    if (!res.ok || !data.user) throw new Error(data.error || 'Registration failed');
     return data;
   },
 
@@ -106,6 +108,15 @@ export const api = {
       const { defaultApplications } = await import('../data/mockDatabase');
       return defaultApplications.find(a => a.id === id) || null;
     }
+  },
+
+  async trackApplication(payload: { identifier?: string; applicationId?: string; contact?: string; otp: string }): Promise<{ success: boolean; application?: LoanApplication; error?: string }> {
+    const res = await fetch('/api/applications/track', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    return await res.json();
   },
 
   async saveApplication(application: Partial<LoanApplication>): Promise<LoanApplication> {
@@ -247,6 +258,13 @@ export const api = {
     }
   },
 
+  async getAdminDashboardSummary(params?: Record<string, string>): Promise<any> {
+    const query = params ? `?${new URLSearchParams(params).toString()}` : '';
+    const res = await fetch(`/api/admin/dashboard/summary${query}`);
+    const data = await res.json();
+    return data;
+  },
+
   async getCustomers(): Promise<any[]> {
     try {
       const res = await fetch('/api/customers');
@@ -361,4 +379,3 @@ export const api = {
     return data.loanAccount;
   },
 };
-

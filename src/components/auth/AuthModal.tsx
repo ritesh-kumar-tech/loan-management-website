@@ -1,14 +1,15 @@
 import React, { useState } from 'react';
-import { CompanySettings } from '../../types';
+import { CompanySettings, User } from '../../types';
 import { X } from 'lucide-react';
 
 interface AuthModalProps {
   settings: CompanySettings;
   onClose: () => void;
+  onAuthenticated: (user: User) => void;
   onUnavailable: () => void;
 }
 
-export const AuthModal: React.FC<AuthModalProps> = ({ settings, onClose, onUnavailable }) => {
+export const AuthModal: React.FC<AuthModalProps> = ({ settings, onClose, onAuthenticated }) => {
   const [mode, setMode] = useState<'login' | 'register'>('login');
   const [email, setEmail] = useState('aniket.verma@example.com');
   const [password, setPassword] = useState('password123');
@@ -17,24 +18,21 @@ export const AuthModal: React.FC<AuthModalProps> = ({ settings, onClose, onUnava
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const showUnavailableMessage = () => {
-    setError('Login is still in progress.');
-    window.alert('Login is still in progress.');
-    setLoading(false);
-    onUnavailable();
-  };
-
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
     setError(null);
-    showUnavailableMessage();
+    // Login is intentionally disabled. Keep the form visible, but do not authenticate users.
+    setError('Login is currently disabled.');
+    setLoading(false);
   };
 
-  const handleDemoLogin = () => {
+  const handleDemoLogin = async (role: 'customer' | 'admin') => {
     setLoading(true);
     setError(null);
-    showUnavailableMessage();
+    // Demo portal login is intentionally disabled. Keep buttons visible for layout consistency.
+    setError(`${role === 'admin' ? 'Admin' : 'Customer'} login is currently disabled.`);
+    setLoading(false);
   };
 
   return (
@@ -62,13 +60,13 @@ export const AuthModal: React.FC<AuthModalProps> = ({ settings, onClose, onUnava
           <span className="font-bold text-slate-700 block uppercase tracking-wider text-[10px]">Quick Demo Portals</span>
           <div className="grid grid-cols-2 gap-2">
             <button
-              onClick={handleDemoLogin}
+              onClick={() => handleDemoLogin('customer')}
               className="py-2 px-3 rounded-xl bg-slate-900 hover:bg-slate-800 text-white font-bold text-[11px] cursor-pointer"
             >
               Customer Demo
             </button>
             <button
-              onClick={handleDemoLogin}
+              onClick={() => handleDemoLogin('admin')}
               className="py-2 px-3 rounded-xl bg-blue-700 hover:bg-blue-800 text-white font-bold text-[11px] cursor-pointer"
             >
               Admin Portal

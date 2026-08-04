@@ -29,7 +29,7 @@ export function calculateEmi(
   tenureMonths: number,
   processingFeePercent: number = 1.5
 ): EmiCalculationResult {
-  if (principal <= 0 || annualRate <= 0 || tenureMonths <= 0) {
+  if (principal <= 0 || annualRate < 0 || tenureMonths <= 0) {
     return {
       monthlyEmi: 0,
       totalInterest: 0,
@@ -41,10 +41,12 @@ export function calculateEmi(
   }
 
   const monthlyRate = annualRate / 12 / 100;
-  
-  // E = P * r * (1+r)^n / ((1+r)^n - 1)
-  const factor = Math.pow(1 + monthlyRate, tenureMonths);
-  const monthlyEmi = Math.round((principal * monthlyRate * factor) / (factor - 1));
+  const monthlyEmi = monthlyRate === 0
+    ? Math.round(principal / tenureMonths)
+    : (() => {
+        const factor = Math.pow(1 + monthlyRate, tenureMonths);
+        return Math.round((principal * monthlyRate * factor) / (factor - 1));
+      })();
 
   let currentPrincipal = principal;
   let totalInterest = 0;

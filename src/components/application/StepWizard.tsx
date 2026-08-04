@@ -89,10 +89,8 @@ export const StepWizard: React.FC<StepWizardProps> = ({
 
   // Documents
   const [documents, setDocuments] = useState<ApplicationDocument[]>([
-    { id: 'd1', docType: 'pan', title: 'PAN Card Copy', fileName: 'pan_card.pdf', fileUrl: '#', uploadedAt: new Date().toISOString(), status: 'verified' },
-    { id: 'd2', docType: 'aadhaar', title: 'Aadhaar Identity Proof', fileName: 'aadhaar_card.pdf', fileUrl: '#', uploadedAt: new Date().toISOString(), status: 'verified' },
-    { id: 'd3', docType: 'income_proof', title: 'Salary Slips / Bank Statement', fileName: 'income_proof.pdf', fileUrl: '#', uploadedAt: new Date().toISOString(), status: 'verified' },
   ]);
+  const [uploadError, setUploadError] = useState<string | null>(null);
 
   // Consents
   const [termsAccepted, setTermsAccepted] = useState(true);
@@ -104,8 +102,21 @@ export const StepWizard: React.FC<StepWizardProps> = ({
   const [eligibilityResult, setEligibilityResult] = useState<EligibilityResult | null>(null);
 
   const selectedProduct = products.find((p) => p.id === productId) || products[0];
+  const requiredDocumentNames = selectedProduct?.requiredDocs?.length ? selectedProduct.requiredDocs : ['PAN Card', 'Aadhaar Card', 'Passport-size Photograph', 'Bank Statement'];
 
   const handleDocumentUpload = (docType: string, title: string, file: File) => {
+    setUploadError(null);
+    const allowedTypes = ['application/pdf', 'image/jpeg', 'image/png'];
+    const allowedExtensions = ['pdf', 'jpg', 'jpeg', 'png'];
+    const extension = file.name.split('.').pop()?.toLowerCase() || '';
+    if (!allowedTypes.includes(file.type) || !allowedExtensions.includes(extension)) {
+      setUploadError('Only PDF, JPG, JPEG, and PNG files are allowed.');
+      return;
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      setUploadError('Each document must be 5 MB or smaller.');
+      return;
+    }
     const newDoc: ApplicationDocument = {
       id: `doc_${Date.now()}`,
       docType,
@@ -119,6 +130,12 @@ export const StepWizard: React.FC<StepWizardProps> = ({
   };
 
   const handleFinalSubmit = async () => {
+    const missingDocs = requiredDocumentNames.filter((docName) => !documents.some((doc) => doc.docType === docName.toLowerCase().replace(/[^a-z0-9]+/g, '_')));
+    if (missingDocs.length) {
+      setCurrentStep(6);
+      setUploadError(`Please upload required documents: ${missingDocs.join(', ')}.`);
+      return;
+    }
     setSubmitting(true);
     try {
       // 1. Run Automated Eligibility Engine
@@ -531,12 +548,8 @@ export const StepWizard: React.FC<StepWizardProps> = ({
             </h2>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              {[
-                { type: 'pan', label: 'PAN Card Copy *' },
-                { type: 'aadhaar', label: 'Aadhaar Card Copy *' },
-                { type: 'salary', label: 'Last 3 Months Salary Slips *' },
-                { type: 'bank_statement', label: '6 Months Bank Statement *' },
-              ].map((docItem) => {
+              {requiredDocumentNames.map((docName) => {
+                const docItem = { type: docName.toLowerCase().replace(/[^a-z0-9]+/g, '_'), label: `${docName} *` };
                 const uploaded = documents.find((d) => d.docType === docItem.type);
                 return (
                   <div key={docItem.type} className="p-4 rounded-xl border border-slate-200 bg-slate-50 space-y-2">
@@ -550,9 +563,10 @@ export const StepWizard: React.FC<StepWizardProps> = ({
                       <label className="block p-3 rounded-lg border border-dashed border-slate-300 bg-white text-center cursor-pointer hover:bg-slate-100 transition-colors">
                         <Upload className="w-4 h-4 text-slate-400 mx-auto mb-1" />
                         <span className="text-xs text-slate-600 font-medium block">Select File (PDF / JPG)</span>
+                        <span className="text-[10px] text-slate-400 block mt-1">Max 5 MB. Unsafe executable files are blocked.</span>
                         <input
                           type="file"
-                          accept=".pdf,image/*"
+                          accept=".pdf,.jpg,.jpeg,.png,application/pdf,image/jpeg,image/png"
                           onChange={(e) => {
                             if (e.target.files?.[0]) {
                               handleDocumentUpload(docItem.type, docItem.label, e.target.files[0]);
@@ -566,6 +580,11 @@ export const StepWizard: React.FC<StepWizardProps> = ({
                 );
               })}
             </div>
+            {uploadError && (
+              <div className="p-3 rounded-xl bg-rose-50 border border-rose-200 text-rose-800 text-xs font-semibold">
+                {uploadError}
+              </div>
+            )}
           </div>
         )}
 

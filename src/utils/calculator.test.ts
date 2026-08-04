@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { calculateEmi, calculateFOIR, formatINR } from './calculator';
 
 const expectedReducingBalanceEmi = (principal: number, annualRate: number, tenureMonths: number) => {
+  if (annualRate === 0) return Math.round(principal / tenureMonths);
   const monthlyRate = annualRate / 12 / 100;
   const factor = Math.pow(1 + monthlyRate, tenureMonths);
   return Math.round((principal * monthlyRate * factor) / (factor - 1));
@@ -39,6 +40,7 @@ verifySchedule(100000, 12, 12);
 verifySchedule(1000000, 8.5, 60);
 verifySchedule(25000, 6, 12);
 verifySchedule(20000000, 16, 180);
+verifySchedule(120000, 0, 12);
 
 assert.deepEqual(calculateEmi(0, 6, 12).schedule, []);
 assert.equal(calculateEmi(100000, -1, 12).monthlyEmi, 0);

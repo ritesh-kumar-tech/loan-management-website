@@ -28,6 +28,7 @@ import {
   generateRepaymentSchedulePDF, 
   generateProvisionalEligibilityLetter 
 } from '../../../utils/pdfGenerator';
+import { StatusBadge } from '../../shared/StatusBadge';
 
 interface ApplicationManagementViewProps {
   applications: LoanApplication[];
@@ -230,12 +231,7 @@ export const ApplicationManagementView: React.FC<ApplicationManagementViewProps>
                     </td>
                     <td className="py-3.5 px-4 text-slate-500">{formatDate(app.createdAt)}</td>
                     <td className="py-3.5 px-4">
-                      <span className={`px-2.5 py-1 rounded-full font-bold uppercase text-[10px] ${
-                        app.status === 'approved' ? 'bg-emerald-100 text-emerald-800' :
-                        app.status === 'rejected' ? 'bg-rose-100 text-rose-800' : 'bg-amber-100 text-amber-800'
-                      }`}>
-                        {app.status.replace('_', ' ')}
-                      </span>
+                      <StatusBadge status={app.status} />
                     </td>
                     <td className="py-3.5 px-4 text-right">
                       <button
@@ -264,12 +260,7 @@ export const ApplicationManagementView: React.FC<ApplicationManagementViewProps>
                   <span className="font-mono text-xs font-bold text-indigo-600 bg-indigo-50 px-2.5 py-0.5 rounded-md border border-indigo-100">
                     {selectedApp.id}
                   </span>
-                  <span className={`px-2.5 py-0.5 rounded-full font-bold text-[10px] uppercase ${
-                    selectedApp.status === 'approved' ? 'bg-emerald-100 text-emerald-800' :
-                    selectedApp.status === 'rejected' ? 'bg-rose-100 text-rose-800' : 'bg-amber-100 text-amber-800'
-                  }`}>
-                    {selectedApp.status}
-                  </span>
+                  <StatusBadge status={selectedApp.status} />
                 </div>
                 <h3 className="text-xl font-black text-slate-900 mt-1">{selectedApp.personalInfo?.fullName}</h3>
                 <p className="text-xs text-slate-500">{selectedApp.productTitle} • Requested Amount: {formatINR(selectedApp.requestedAmount)} over {selectedApp.requestedTenureMonths} Months</p>

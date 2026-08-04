@@ -131,61 +131,42 @@ export const PromotionalCarousel: React.FC<{
 
 export const DocumentsAndTrust: React.FC<{ cms?: CmsContent }> = ({ cms }) => {
   const docs = ordered<CmsDocumentItem>(cms?.documentItems || []);
-  const trust = ordered<CmsTrustItem>(cms?.trustItems || []);
 
   return (
-    <>
-      <section id="required-documents" className="df-section bg-white border-b border-blue-100 scroll-mt-24">
-        <div className="df-container">
-          <div className="text-center max-w-3xl mx-auto mb-10">
-            <span className="df-eyebrow">Application Readiness</span>
-            <h2 className="df-heading mt-4">Keep These Documents Ready</h2>
-            <p className="df-copy mt-3">General requirements are shown publicly. Customer dashboards show uploaded, pending, verified, or rejected statuses without exposing sensitive document numbers.</p>
-          </div>
+    <section id="required-documents" className="df-section bg-white border-b border-blue-100 scroll-mt-24">
+      <div className="df-container">
+        <div className="text-center max-w-3xl mx-auto mb-10">
+          <span className="df-eyebrow">Application Readiness</span>
+          <h2 className="df-heading mt-4">Keep These Documents Ready</h2>
+          <p className="df-copy mt-3">General requirements are shown publicly. Customer dashboards show uploaded, pending, verified, or rejected statuses without exposing sensitive document numbers.</p>
+        </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
-            {docs.map((doc, idx) => (
-              <article key={doc.id} className="group df-card df-card-hover p-6 min-h-[210px]">
-                <div className="flex items-start gap-5">
-                  <div className="w-20 h-20 rounded-[20px] bg-blue-700 text-white grid place-items-center shadow-lg shadow-blue-200 shrink-0">
-                    <Icon name={doc.iconName} className="w-9 h-9" />
-                  </div>
-                  <div className="flex-1">
-                    <span className="inline-flex items-center rounded-full bg-blue-50 text-blue-700 px-2 py-0.5 text-[11px] font-extrabold">Step {String(idx + 1).padStart(2, '0')}</span>
-                    <h3 className="text-lg font-extrabold text-slate-950 mt-3 leading-snug">{doc.name}</h3>
-                    <p className="text-sm text-slate-600 mt-2 leading-relaxed">{doc.description}</p>
-                    <div className="mt-4 flex flex-wrap gap-2 text-xs">
-                      <span className="rounded-full bg-slate-100 px-3 py-1 text-slate-600"><strong>Formats:</strong> {doc.formats}</span>
-                      <span className="rounded-full bg-blue-50 px-3 py-1 text-blue-800">Max 5 MB</span>
-                      <span className={`rounded-full px-3 py-1 ${doc.isRequired ? 'bg-blue-100 text-blue-800' : 'bg-amber-100 text-amber-800'}`}>{doc.isRequired ? 'Required' : 'Conditional'}</span>
-                    </div>
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
+          {docs.map((doc, idx) => (
+            <article key={doc.id} className="group df-card df-card-hover p-6 min-h-[210px]">
+              <div className="flex items-start gap-5">
+                <div className="w-20 h-20 rounded-[20px] bg-blue-700 text-white grid place-items-center shadow-lg shadow-blue-200 shrink-0">
+                  <Icon name={doc.iconName} className="w-9 h-9" />
+                </div>
+                <div className="flex-1">
+                  <span className="inline-flex items-center rounded-full bg-blue-50 text-blue-700 px-2 py-0.5 text-[11px] font-extrabold">Step {String(idx + 1).padStart(2, '0')}</span>
+                  <h3 className="text-lg font-extrabold text-slate-950 mt-3 leading-snug">{doc.name}</h3>
+                  <p className="text-sm text-slate-600 mt-2 leading-relaxed">{doc.description}</p>
+                  <div className="mt-4 flex flex-wrap gap-2 text-xs">
+                    <span className="rounded-full bg-slate-100 px-3 py-1 text-slate-600"><strong>Formats:</strong> {doc.formats}</span>
+                    <span className="rounded-full bg-blue-50 px-3 py-1 text-blue-800">Max 5 MB</span>
+                    <span className={`rounded-full px-3 py-1 ${doc.isRequired ? 'bg-blue-100 text-blue-800' : 'bg-amber-100 text-amber-800'}`}>{doc.isRequired ? 'Required' : 'Conditional'}</span>
                   </div>
                 </div>
-              </article>
-            ))}
-          </div>
-          <div className="mt-8 text-center">
-            <button className="df-btn df-btn-secondary mx-auto">View Complete Document Checklist <ArrowRight className="w-4 h-4" /></button>
-          </div>
-        </div>
-      </section>
-
-      <section className="bg-gradient-to-r from-[#073B8C] via-[#0B5ED7] to-[#1E88FF] text-white">
-        <div className="df-container py-10 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-5">
-          {trust.map((item) => (
-            <div key={item.id} className="flex items-start gap-4 rounded-2xl bg-white/10 border border-white/15 p-4 hover:bg-white/15 transition-colors">
-              <div className="w-12 h-12 rounded-xl bg-white/15 border border-white/20 grid place-items-center shrink-0">
-                <Icon name={item.iconName} className="w-6 h-6" />
               </div>
-              <div>
-                <h3 className="text-base font-extrabold">{item.title}</h3>
-                <p className="text-sm text-blue-100 mt-1 leading-relaxed">{item.description}</p>
-              </div>
-            </div>
+            </article>
           ))}
         </div>
-      </section>
-    </>
+        <div className="mt-8 text-center">
+          <button className="df-btn df-btn-secondary mx-auto">View Complete Document Checklist <ArrowRight className="w-4 h-4" /></button>
+        </div>
+      </div>
+    </section>
   );
 };
 
@@ -347,25 +328,6 @@ export const TestimonialStatsCta: React.FC<{
               <p className="text-xs text-slate-500 mt-1">Admin-managed platform capability</p>
             </div>
           ))}
-        </div>
-      </section>
-
-      <section className="df-section-sm bg-white">
-        <div className="df-container">
-          <div className="relative overflow-hidden rounded-[32px] bg-gradient-to-r from-[#071B3D] via-[#0B5ED7] to-[#1E88FF] px-6 py-12 sm:px-12 lg:px-14 lg:py-16 text-white shadow-xl">
-            <div className="absolute inset-0 opacity-20 bg-[radial-gradient(#ffffff_1px,transparent_1px)] [background-size:18px_18px]" />
-            <div className="relative flex flex-col lg:flex-row lg:items-center lg:justify-between gap-6">
-              <div>
-                <h2 className="text-4xl font-black leading-tight">Ready to Take the Next Step?</h2>
-                <p className="text-base text-blue-100 mt-3 max-w-2xl leading-relaxed">Compare EMI values, choose a suitable product, and continue through the existing secure application flow.</p>
-              </div>
-              <div className="flex flex-col sm:flex-row gap-3">
-                <button onClick={onApplyNow} className="df-btn bg-white text-blue-800">Apply for a Loan</button>
-                <button onClick={onCalculateEmi} className="df-btn bg-white/10 border border-white/25 text-white">Calculate EMI</button>
-                <button onClick={onTrack} className="df-btn bg-blue-950/40 border border-white/25 text-white">Track Application</button>
-              </div>
-            </div>
-          </div>
         </div>
       </section>
     </>

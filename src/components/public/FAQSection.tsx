@@ -38,7 +38,7 @@ export const FAQSection: React.FC = () => {
   ];
 
   return (
-    <section className="df-section bg-white border-b border-blue-100">
+    <section id="faq" className="df-section bg-white border-b border-blue-100 scroll-mt-24">
       <div className="df-container grid grid-cols-1 lg:grid-cols-12 gap-10 items-start">
         <div className="lg:col-span-4 lg:sticky lg:top-28">
           <span className="df-eyebrow">Frequently Asked Questions</span>

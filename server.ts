@@ -79,32 +79,22 @@ async function startServer() {
   // Auth: Login
   app.post('/api/auth/login', (req, res) => {
     const { email, password, role } = req.body;
-    let user = users.find((u) => u.email.toLowerCase() === email.toLowerCase());
+    if (!email || !password) {
+      res.status(400).json({ success: false, error: 'Email and password are required.' });
+      return;
+    }
+
+    const user = users.find((u) => u.email.toLowerCase() === String(email).toLowerCase());
     
     if (!user) {
-      if (email.includes('admin')) {
-        user = {
-          id: `usr_admin_${Date.now()}`,
-          fullName: 'Admin User',
-          email,
-          mobile: '9988776655',
-          role: 'admin',
-          isVerified: true,
-          createdAt: new Date().toISOString(),
-        };
-        users.push(user);
-      } else {
-        user = {
-          id: `usr_${Date.now()}`,
-          fullName: email.split('@')[0],
-          email,
-          mobile: '9876543210',
-          role: (role as any) || 'customer',
-          isVerified: true,
-          createdAt: new Date().toISOString(),
-        };
-        users.push(user);
-      }
+      res.status(401).json({ success: false, error: 'Invalid email or password.' });
+      return;
+    }
+
+    if (password !== 'password123') {
+      addAuditLog(user.id, user.role, user.email, 'USER_LOGIN_FAILED', 'User', user.id, 'Invalid password attempt');
+      res.status(401).json({ success: false, error: 'Invalid email or password.' });
+      return;
     }
 
     addAuditLog(user.id, user.role, user.email, 'USER_LOGIN', 'User', user.id, 'User logged in successfully');
@@ -237,12 +227,85 @@ async function startServer() {
   });
 
   app.get('/api/applications/:id', (req, res) => {
-    const appItem = applications.find((a) => a.id === req.params.id);
+    res.status(403).json({ success: false, error: 'Use secure tracking verification or authenticated application lists.' });
+  });
+
+  app.post('/api/applications/track', (req, res) => {
+    const { identifier, applicationId, contact, otp } = req.body;
+    const lookupValue = String(identifier || applicationId || contact || '').trim().toLowerCase();
+    const normalizedContact = String(contact || '').trim().toLowerCase();
+    const appItem = applications
+      .filter((a) =>
+        a.id.toLowerCase() === lookupValue ||
+        a.personalInfo?.mobile === lookupValue ||
+        a.personalInfo?.email?.toLowerCase() === lookupValue
+      )
+      .sort((a, b) => new Date(b.updatedAt || b.createdAt).getTime() - new Date(a.updatedAt || a.createdAt).getTime())[0];
+
     if (!appItem) {
-      res.status(404).json({ success: false, error: 'Application not found' });
+      res.status(404).json({ success: false, error: 'Application not found.' });
       return;
     }
-    res.json({ success: true, application: appItem });
+
+    const contactMatches =
+      !normalizedContact ||
+      appItem.personalInfo?.mobile === normalizedContact ||
+      appItem.personalInfo?.email?.toLowerCase() === normalizedContact;
+
+    if (!contactMatches || String(otp || '').trim() !== '123456') {
+      addAuditLog('public', 'guest', normalizedContact || 'unknown', 'TRACKING_VERIFICATION_FAILED', 'LoanApplication', appItem.id, 'Public tracking verification failed');
+      res.status(403).json({ success: false, error: 'Verification failed. Check the registered mobile/email and OTP.' });
+      return;
+    }
+
+    const maskedName = appItem.personalInfo.fullName.replace(/\b(\w)(\w+)/g, (_match, first, rest) => `${first}${'*'.repeat(Math.min(String(rest).length, 6))}`);
+    const safeApplication = {
+      id: appItem.id,
+      productTitle: appItem.productTitle,
+      productType: appItem.productType,
+      requestedAmount: appItem.requestedAmount,
+      requestedTenureMonths: appItem.requestedTenureMonths,
+      status: appItem.status,
+      statusHistory: appItem.statusHistory.map((item) => ({
+        status: item.status,
+        date: item.date,
+        note: item.note,
+        updatedBy: item.updatedBy,
+      })),
+      createdAt: appItem.createdAt,
+      updatedAt: appItem.updatedAt,
+      personalInfo: {
+        fullName: maskedName,
+        fatherOrSpouseName: 'Hidden for privacy',
+        dob: 'Hidden for privacy',
+        gender: appItem.personalInfo.gender,
+        maritalStatus: appItem.personalInfo.maritalStatus,
+        nationality: 'Hidden for privacy',
+        email: appItem.personalInfo.email.replace(/(^.).*(@.*$)/, '$1***$2'),
+        mobile: appItem.personalInfo.mobile.replace(/^(\d{2})\d+(\d{2})$/, '$1******$2'),
+        panNumber: '*****',
+        aadhaarLast4: '****',
+        currentAddress: 'Hidden for privacy',
+        permanentAddress: 'Hidden for privacy',
+        city: 'Hidden for privacy',
+        state: 'Hidden for privacy',
+        pincode: 'Hidden',
+        residenceType: appItem.personalInfo.residenceType,
+      },
+      documents: appItem.documents.map((doc) => ({
+        id: doc.id,
+        docType: doc.docType,
+        title: doc.title,
+        fileName: doc.fileName,
+        uploadedAt: doc.uploadedAt,
+        status: doc.status,
+        rejectionNote: doc.rejectionNote,
+        fileUrl: '',
+      })),
+    };
+
+    addAuditLog('public', 'guest', normalizedContact, 'TRACKING_VERIFIED', 'LoanApplication', appItem.id, 'Public tracking verification succeeded');
+    res.json({ success: true, application: safeApplication });
   });
 
   app.post('/api/applications', (req, res) => {
@@ -521,6 +584,80 @@ async function startServer() {
   // Audit Logs
   app.get('/api/audit-logs', (req, res) => {
     res.json({ success: true, auditLogs });
+  });
+
+  app.get('/api/admin/dashboard/summary', (req, res) => {
+    const activeLoans = loanAccounts.filter((loan) => loan.status === 'active');
+    const pendingPayments = paymentSubmissions.filter((payment) => payment.status === 'pending_verification');
+    const verifiedPayments = paymentSubmissions.filter((payment) => payment.status === 'verified');
+    const pendingDocuments = applications.reduce((sum, appItem) => sum + (appItem.documents?.filter((doc) => doc.status === 'pending' || doc.status === 'reupload_required').length || 0), 0);
+    const overdueInstallments = activeLoans.flatMap((loan) => loan.schedule.filter((inst) => inst.status === 'overdue'));
+    const totalOutstanding = activeLoans.reduce((sum, loan) => sum + loan.outstandingPrincipal, 0);
+    const overdueAmount = overdueInstallments.reduce((sum, inst) => sum + Math.max(0, inst.emiAmount - inst.paidAmount), 0);
+    const approvedApps = applications.filter((appItem) => appItem.status === 'approved' || appItem.status === 'active' || appItem.status === 'loan_disbursed');
+
+    const applicationTrendMap = new Map<string, any>();
+    applications.forEach((appItem) => {
+      const period = new Date(appItem.createdAt).toLocaleDateString('en-IN', { month: 'short', year: '2-digit' });
+      const row = applicationTrendMap.get(period) || { period, submitted: 0, approved: 0, rejected: 0, approvalRate: 0 };
+      if (appItem.status !== 'draft') row.submitted += 1;
+      if (appItem.status === 'approved' || appItem.status === 'active' || appItem.status === 'loan_disbursed') row.approved += 1;
+      if (appItem.status === 'rejected') row.rejected += 1;
+      applicationTrendMap.set(period, row);
+    });
+
+    const loanPortfolioMap = new Map<string, number>();
+    activeLoans.forEach((loan) => {
+      loanPortfolioMap.set(loan.loanType, (loanPortfolioMap.get(loan.loanType) || 0) + loan.outstandingPrincipal);
+    });
+
+    const totalDue = activeLoans.reduce((sum, loan) => sum + loan.schedule.reduce((inner, inst) => inner + inst.emiAmount, 0), 0);
+    const totalCollection = verifiedPayments.reduce((sum, payment) => sum + payment.amount, 0);
+
+    const applicationTrend = Array.from(applicationTrendMap.values()).map((row) => ({
+      ...row,
+      approvalRate: row.submitted ? Math.round((row.approved / row.submitted) * 100) : 0,
+    }));
+
+    res.json({
+      success: true,
+      summary: {
+        newApplications: applications.filter((appItem) => appItem.status === 'submitted').length,
+        underReview: applications.filter((appItem) => appItem.status === 'under_review' || appItem.status === 'documents_pending' || appItem.status === 'documents_under_verification').length,
+        approvedLoans: approvedApps.length,
+        activeLoans: activeLoans.length,
+        pendingPayments: pendingPayments.length,
+        totalCollection,
+        totalCustomers: customers.length,
+        totalOutstanding,
+        overdueAmount,
+        pendingDocuments,
+        averageApprovalTime: null,
+      },
+      applicationTrend,
+      loanPortfolio: Array.from(loanPortfolioMap.entries()).map(([loanType, outstanding]) => ({ loanType, outstanding })),
+      collectionTrend: [{ period: 'current', due: totalDue, collected: totalCollection, processingFees: verifiedPayments.filter((payment) => payment.purpose === 'processing_fee').reduce((sum, payment) => sum + payment.amount, 0), overdue: overdueAmount }],
+      overdueDistribution: [
+        { bucket: 'current', count: Math.max(0, activeLoans.length - overdueInstallments.length), amount: Math.max(0, totalOutstanding - overdueAmount) },
+        { bucket: 'early_delay', count: overdueInstallments.length ? 1 : 0, amount: overdueAmount },
+        { bucket: 'moderate_overdue', count: 0, amount: 0 },
+        { bucket: 'high_risk', count: 0, amount: 0 },
+      ],
+      applicationFunnel: [
+        { stage: 'submitted', count: applications.filter((appItem) => appItem.status !== 'draft').length },
+        { stage: 'under_review', count: applications.filter((appItem) => appItem.status === 'under_review' || appItem.status === 'documents_pending').length },
+        { stage: 'documents_verified', count: applications.filter((appItem) => appItem.documents?.length && appItem.documents.every((doc) => doc.status === 'verified')).length },
+        { stage: 'approved', count: approvedApps.length },
+        { stage: 'disbursed', count: activeLoans.length },
+      ],
+      pendingActions: [
+        { label: 'Applications awaiting review', count: applications.filter((appItem) => appItem.status === 'submitted' || appItem.status === 'under_review').length },
+        { label: 'Documents awaiting verification', count: pendingDocuments },
+        { label: 'Payments awaiting verification', count: pendingPayments.length },
+      ],
+      recentApplications: applications.slice(0, 5),
+      pendingPayments: pendingPayments.slice(0, 5),
+    });
   });
 
   // Receipts List

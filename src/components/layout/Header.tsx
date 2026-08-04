@@ -19,10 +19,7 @@ import {
   Car,
   Coins,
   ArrowRight,
-  Calculator,
-  FileCheck2,
-  CheckCircle2,
-  Sparkles
+  Calculator
 } from 'lucide-react';
 
 interface HeaderProps {
@@ -91,14 +88,12 @@ export const Header: React.FC<HeaderProps> = ({
     }
   };
 
-  const navItems = [
+  const navItems: { id: string; label: string; hasDropdown?: boolean }[] = [
     { id: 'home', label: 'Home' },
-    { id: 'loans', label: 'Loans', hasDropdown: true },
-    { id: 'calculator', label: 'EMI' },
-    { id: 'apply', label: 'Apply' },
-    { id: 'track', label: 'Track' },
-    { id: 'verify', label: 'Verify' },
-    { id: 'about', label: 'About' },
+    { id: 'how_it_works', label: 'How It Works' },
+    { id: 'calculator', label: 'EMI Calculator' },
+    { id: 'track', label: 'Track Status' },
+    { id: 'faq', label: 'FAQ' },
     { id: 'contact', label: 'Contact' },
   ];
 
@@ -232,6 +227,12 @@ export const Header: React.FC<HeaderProps> = ({
                 onClick={() => {
                   if (item.id === 'apply') {
                     onStartApplication();
+                  } else if (item.id === 'how_it_works') {
+                    setActiveTab('home');
+                    setTimeout(() => document.getElementById('how-it-works')?.scrollIntoView({ behavior: 'smooth' }), 0);
+                  } else if (item.id === 'faq') {
+                    setActiveTab('home');
+                    setTimeout(() => document.getElementById('faq')?.scrollIntoView({ behavior: 'smooth' }), 0);
                   } else {
                     setActiveTab(item.id);
                   }
@@ -340,6 +341,12 @@ export const Header: React.FC<HeaderProps> = ({
                   onClick={() => {
                     if (item.id === 'apply') {
                       onStartApplication();
+                    } else if (item.id === 'how_it_works') {
+                      setActiveTab('home');
+                      setTimeout(() => document.getElementById('how-it-works')?.scrollIntoView({ behavior: 'smooth' }), 0);
+                    } else if (item.id === 'faq') {
+                      setActiveTab('home');
+                      setTimeout(() => document.getElementById('faq')?.scrollIntoView({ behavior: 'smooth' }), 0);
                     } else {
                       setActiveTab(item.id);
                     }

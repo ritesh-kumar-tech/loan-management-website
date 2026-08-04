@@ -6,7 +6,7 @@ interface ProcessStepsProps {
 
 export const ProcessSteps: React.FC<ProcessStepsProps> = ({ onStartApplication }) => {
   const steps = [
-    { num: '1', title: 'Create Account', desc: 'Create your secure customer profile.' },
+    { num: '1', title: 'Apply for Loan', desc: 'Start your loan application with basic loan requirements.' },
     { num: '2', title: 'Complete Application', desc: 'Enter loan, personal, income, and bank details.' },
     { num: '3', title: 'Upload Documents', desc: 'Attach required KYC, income, and bank proofs.' },
     { num: '4', title: 'Eligibility Assessment', desc: 'Policy rules review income, amount, tenure, and obligations.' },
@@ -16,7 +16,7 @@ export const ProcessSteps: React.FC<ProcessStepsProps> = ({ onStartApplication }
   ];
 
   return (
-    <section className="df-section bg-white border-b border-blue-100">
+    <section id="how-it-works" className="df-section bg-white border-b border-blue-100 scroll-mt-24">
       <div className="df-container">
         <div className="text-center max-w-3xl mx-auto mb-12">
           <span className="df-eyebrow">
