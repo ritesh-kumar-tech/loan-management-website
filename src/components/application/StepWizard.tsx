@@ -132,7 +132,7 @@ export const StepWizard: React.FC<StepWizardProps> = ({
   const handleFinalSubmit = async () => {
     const missingDocs = requiredDocumentNames.filter((docName) => !documents.some((doc) => doc.docType === docName.toLowerCase().replace(/[^a-z0-9]+/g, '_')));
     if (missingDocs.length) {
-      setCurrentStep(6);
+      setCurrentStep(4);
       setUploadError(`Please upload required documents: ${missingDocs.join(', ')}.`);
       return;
     }
@@ -169,7 +169,7 @@ export const StepWizard: React.FC<StepWizardProps> = ({
       });
 
       setCreatedApplication(savedApp);
-      setCurrentStep(8); // Success step
+      setCurrentStep(6); // Success step
     } catch (e) {
       console.error(e);
     } finally {
@@ -180,9 +180,7 @@ export const StepWizard: React.FC<StepWizardProps> = ({
   const steps = [
     'Loan Terms',
     'Personal Info',
-    'Employment',
     'Financials',
-    'References',
     'Upload Docs',
     'Review',
     'Acknowledgement',
@@ -193,13 +191,13 @@ export const StepWizard: React.FC<StepWizardProps> = ({
       {/* Progress Bar */}
       <div className="mb-8">
         <div className="flex items-center justify-between text-xs font-bold text-slate-500 mb-2">
-          <span>Step {currentStep} of 8: {steps[currentStep - 1]}</span>
-          <span>{Math.round((currentStep / 8) * 100)}% Completed</span>
+          <span>Step {currentStep} of 6: {steps[currentStep - 1]}</span>
+          <span>{Math.round((currentStep / 6) * 100)}% Completed</span>
         </div>
         <div className="w-full h-2 bg-slate-200 rounded-full overflow-hidden">
           <div
             className="h-full bg-blue-700 transition-all duration-300"
-            style={{ width: `${(currentStep / 8) * 100}%` }}
+            style={{ width: `${(currentStep / 6) * 100}%` }}
           />
         </div>
       </div>
@@ -212,34 +210,22 @@ export const StepWizard: React.FC<StepWizardProps> = ({
               Step 1: Select Loan Requirement
             </h2>
 
-            <div>
-              <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-2">
-                Select Loan Product Category *
-              </label>
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-                {products.map((p) => (
-                  <button
-                    key={p.id}
-                    type="button"
-                    onClick={() => {
-                      setProductId(p.id);
-                      setAmount(p.minAmount);
-                    }}
-                    className={`p-4 rounded-xl border text-left transition-all cursor-pointer ${
-                      productId === p.id
-                        ? 'border-emerald-600 bg-emerald-50/50 ring-2 ring-emerald-600/20'
-                        : 'border-slate-200 hover:border-slate-300 bg-white'
-                    }`}
-                  >
-                    <div className="font-bold text-sm text-slate-900">{p.title}</div>
-                    <div className="text-xs text-slate-500 mt-1">Rates from {p.minInterestRate}% p.a.</div>
-                    <div className="text-[11px] text-emerald-700 font-semibold mt-2">Up to {formatINR(p.maxAmount)}</div>
-                  </button>
-                ))}
-              </div>
-            </div>
-
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+              <div>
+                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-2">
+                  Employment Type *
+                </label>
+                <select
+                  value={employment.employmentType}
+                  onChange={(e) => setEmployment({ ...employment, employmentType: e.target.value as any })}
+                  className="w-full px-4 py-2.5 rounded-xl border border-slate-300 text-sm font-semibold"
+                >
+                  <option value="salaried">Salaried Employee</option>
+                  <option value="self_employed_pro">Self Employed</option>
+                  <option value="self_employed_biz">Business Owner</option>
+                  <option value="freelancer">Freelancer</option>
+                </select>
+              </div>
               <div>
                 <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-2">
                   Required Loan Amount * ({formatINR(amount)})
@@ -370,66 +356,11 @@ export const StepWizard: React.FC<StepWizardProps> = ({
           </div>
         )}
 
-        {/* STEP 3: Employment Information */}
+        {/* STEP 3: Financial Information */}
         {currentStep === 3 && (
           <div className="space-y-6">
             <h2 className="text-xl font-extrabold text-slate-900 border-b border-slate-100 pb-3">
-              Step 3: Employment & Work Profile
-            </h2>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">Employment Type *</label>
-                <select
-                  value={employment.employmentType}
-                  onChange={(e) => setEmployment({ ...employment, employmentType: e.target.value as any })}
-                  className="w-full px-3.5 py-2 rounded-xl border border-slate-300 text-sm font-semibold"
-                >
-                  <option value="salaried">Salaried Employee</option>
-                  <option value="self_employed_pro">Self-Employed Professional (Doctor/CA/Lawyer)</option>
-                  <option value="self_employed_biz">Self-Employed Business / Proprietor</option>
-                  <option value="freelancer">Freelancer / Consultant</option>
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">Company / Business Name *</label>
-                <input
-                  type="text"
-                  value={employment.companyOrBizName}
-                  onChange={(e) => setEmployment({ ...employment, companyOrBizName: e.target.value })}
-                  className="w-full px-3.5 py-2 rounded-xl border border-slate-300 text-sm"
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">Designation / Role *</label>
-                <input
-                  type="text"
-                  value={employment.designationOrBizType}
-                  onChange={(e) => setEmployment({ ...employment, designationOrBizType: e.target.value })}
-                  className="w-full px-3.5 py-2 rounded-xl border border-slate-300 text-sm"
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">Total Work Experience (Years) *</label>
-                <input
-                  type="number"
-                  value={employment.workExperienceYears}
-                  onChange={(e) => setEmployment({ ...employment, workExperienceYears: Number(e.target.value) })}
-                  className="w-full px-3.5 py-2 rounded-xl border border-slate-300 text-sm"
-                />
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* STEP 4: Financial Information */}
-        {currentStep === 4 && (
-          <div className="space-y-6">
-            <h2 className="text-xl font-extrabold text-slate-900 border-b border-slate-100 pb-3">
-              Step 4: Income & Banking Details
+              Step 3: Income & Banking Details
             </h2>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -486,65 +417,11 @@ export const StepWizard: React.FC<StepWizardProps> = ({
           </div>
         )}
 
-        {/* STEP 5: References */}
-        {currentStep === 5 && (
+        {/* STEP 4: Document Upload */}
+        {currentStep === 4 && (
           <div className="space-y-6">
             <h2 className="text-xl font-extrabold text-slate-900 border-b border-slate-100 pb-3">
-              Step 5: Reference Persons
-            </h2>
-            <div className="space-y-4">
-              {references.map((ref, idx) => (
-                <div key={idx} className="p-4 rounded-xl bg-slate-50 border border-slate-200 grid grid-cols-1 sm:grid-cols-3 gap-3">
-                  <div>
-                    <label className="block text-xs font-bold text-slate-600 mb-1">Reference {idx + 1} Name</label>
-                    <input
-                      type="text"
-                      value={ref.name}
-                      onChange={(e) => {
-                        const updated = [...references];
-                        updated[idx].name = e.target.value;
-                        setReferences(updated);
-                      }}
-                      className="w-full px-3 py-1.5 rounded-lg border border-slate-300 text-sm bg-white"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-bold text-slate-600 mb-1">Relationship</label>
-                    <input
-                      type="text"
-                      value={ref.relationship}
-                      onChange={(e) => {
-                        const updated = [...references];
-                        updated[idx].relationship = e.target.value;
-                        setReferences(updated);
-                      }}
-                      className="w-full px-3 py-1.5 rounded-lg border border-slate-300 text-sm bg-white"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-bold text-slate-600 mb-1">Mobile Number</label>
-                    <input
-                      type="text"
-                      value={ref.mobile}
-                      onChange={(e) => {
-                        const updated = [...references];
-                        updated[idx].mobile = e.target.value;
-                        setReferences(updated);
-                      }}
-                      className="w-full px-3 py-1.5 rounded-lg border border-slate-300 text-sm bg-white"
-                    />
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {/* STEP 6: Document Upload */}
-        {currentStep === 6 && (
-          <div className="space-y-6">
-            <h2 className="text-xl font-extrabold text-slate-900 border-b border-slate-100 pb-3">
-              Step 6: Upload KYC & Income Documents
+              Step 4: Upload KYC & Income Documents
             </h2>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -588,11 +465,11 @@ export const StepWizard: React.FC<StepWizardProps> = ({
           </div>
         )}
 
-        {/* STEP 7: Review & Declarations */}
-        {currentStep === 7 && (
+        {/* STEP 5: Review & Declarations */}
+        {currentStep === 5 && (
           <div className="space-y-6">
             <h2 className="text-xl font-extrabold text-slate-900 border-b border-slate-100 pb-3">
-              Step 7: Final Review & Declarations
+              Step 5: Final Review & Declarations
             </h2>
 
             <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 space-y-3 text-sm">
@@ -642,8 +519,8 @@ export const StepWizard: React.FC<StepWizardProps> = ({
           </div>
         )}
 
-        {/* STEP 8: Success Acknowledgement */}
-        {currentStep === 8 && createdApplication && (
+        {/* STEP 6: Success Acknowledgement */}
+        {currentStep === 6 && createdApplication && (
           <div className="space-y-6 text-center py-4">
             <div className="w-16 h-16 rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center mx-auto text-2xl font-bold">
               ✓
@@ -697,7 +574,7 @@ export const StepWizard: React.FC<StepWizardProps> = ({
         )}
 
         {/* Wizard Controls */}
-        {currentStep < 8 && (
+        {currentStep < 6 && (
           <div className="mt-8 pt-4 border-t border-slate-100 flex items-center justify-between">
             <button
               onClick={() => {
@@ -709,7 +586,7 @@ export const StepWizard: React.FC<StepWizardProps> = ({
               <ChevronLeft className="w-4 h-4" /> {currentStep === 1 ? 'Cancel' : 'Back'}
             </button>
 
-            {currentStep < 7 ? (
+            {currentStep < 5 ? (
               <button
                 onClick={() => setCurrentStep(currentStep + 1)}
                 className="px-6 py-2.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-white text-sm font-semibold flex items-center gap-1 cursor-pointer shadow-sm"

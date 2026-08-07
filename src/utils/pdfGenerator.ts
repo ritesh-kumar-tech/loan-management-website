@@ -2,29 +2,34 @@ import { jsPDF } from 'jspdf';
 import { LoanApplication, LoanAccount, PaymentSubmission, Receipt, CompanySettings } from '../types';
 import { formatINR, formatDate } from './calculator';
 
-// Helper to draw clean header and watermark
 function drawHeader(doc: jsPDF, settings: CompanySettings, docTitle: string) {
   // Primary top bar
-  doc.setFillColor(15, 23, 42); // slate-900
-  doc.rect(0, 0, 210, 22, 'F');
+  doc.setFillColor(11, 25, 44); // Deep Navy
+  doc.rect(0, 0, 210, 24, 'F');
 
+  // Draw Logo (Stylized D)
+  doc.setFillColor(16, 185, 129); // Emerald-500
+  doc.roundedRect(14, 6, 12, 12, 2, 2, 'F');
   doc.setTextColor(255, 255, 255);
   doc.setFont('helvetica', 'bold');
+  doc.setFontSize(10);
+  doc.text('D', 18, 14.5);
+
   doc.setFontSize(14);
-  doc.text(settings.companyName.toUpperCase(), 14, 14);
+  doc.text(settings.companyName.toUpperCase(), 30, 14.5);
 
   doc.setFontSize(9);
   doc.setFont('helvetica', 'normal');
-  doc.text(docTitle.toUpperCase(), 196, 14, { align: 'right' });
+  doc.text(docTitle.toUpperCase(), 196, 14.5, { align: 'right' });
 
   // Sub-header with company contact
-  doc.setTextColor(71, 85, 105);
+  doc.setTextColor(100, 116, 139);
   doc.setFontSize(8);
-  doc.text(`${settings.registeredAddress} | Phone: ${settings.supportPhone} | Email: ${settings.supportEmail}`, 14, 28);
-  doc.text(`NBFC Reg/License: ${settings.nbfcLicenseInfo} | GSTIN: ${settings.gstNumber}`, 14, 32);
+  doc.text(`${settings.registeredAddress} | Phone: ${settings.supportPhone} | Email: ${settings.supportEmail}`, 14, 30);
+  doc.text(`NBFC Reg/License: ${settings.nbfcLicenseInfo} | GSTIN: ${settings.gstNumber}`, 14, 34);
 
   doc.setDrawColor(226, 232, 240);
-  doc.line(14, 35, 196, 35);
+  doc.line(14, 37, 196, 37);
 }
 
 function drawFooter(doc: jsPDF, settings: CompanySettings, docNumber: string) {
@@ -292,59 +297,191 @@ export function generateLoanAgreement(app: LoanApplication, settings: CompanySet
 // 5. EMI Repayment Schedule
 export function generateRepaymentSchedulePDF(loan: LoanAccount, settings: CompanySettings) {
   const doc = new jsPDF();
+  
+  // Helper to safely format currency for jsPDF (avoids ₹ rendering issue)
+  const formatPDF_INR = (amount: number) => {
+    return formatINR(amount).replace('₹', 'Rs. ');
+  };
+
+  const drawWatermark = () => {
+    doc.setFontSize(60);
+    doc.setTextColor(245, 247, 250);
+    doc.text(settings.companyName.toUpperCase(), 105, 160, { angle: 45, align: 'center' });
+  };
+
+  drawWatermark();
   drawHeader(doc, settings, 'Repayment Schedule');
 
-  let y = 45;
+  let y = 48;
   doc.setFont('helvetica', 'bold');
-  doc.setFontSize(12);
-  doc.text('LOAN AMORTIZATION & REPAYMENT SCHEDULE', 14, y);
+  doc.setFontSize(18);
+  doc.setTextColor(11, 25, 44);
+  doc.text('REPAYMENT SCHEDULE', 14, y);
 
-  y += 8;
-  doc.setFontSize(9);
-  doc.setFont('helvetica', 'normal');
-  doc.text(`Loan Account No: ${loan.accountNumber}`, 14, y);
-  doc.text(`Borrower: ${loan.customerName}`, 14, y + 5);
-  doc.text(`Sanctioned Principal: ${formatINR(loan.principalAmount)} | Rate: ${loan.interestRate}% p.a. | EMI: ${formatINR(loan.monthlyEmi)}`, 14, y + 10);
-
-  y += 18;
-  // Schedule Table Header
-  doc.setFillColor(15, 23, 42);
-  doc.rect(14, y, 182, 8, 'F');
-  doc.setTextColor(255, 255, 255);
-  doc.setFont('helvetica', 'bold');
+  // Status Badge
+  doc.setFillColor(16, 185, 129); // Emerald
+  doc.roundedRect(165, y - 6, 31, 8, 4, 4, 'F');
   doc.setFontSize(8);
-  doc.text('Inst #', 16, y + 5.5);
-  doc.text('Due Date', 32, y + 5.5);
-  doc.text('Opening Bal', 62, y + 5.5);
-  doc.text('EMI (₹)', 95, y + 5.5);
-  doc.text('Principal (₹)', 125, y + 5.5);
-  doc.text('Interest (₹)', 155, y + 5.5);
-  doc.text('Status', 182, y + 5.5);
+  doc.setTextColor(255, 255, 255);
+  doc.text('ACTIVE LOAN', 180.5, y - 0.5, { align: 'center' });
 
-  y += 8;
+  y += 12;
+  
+  // Calculate Totals
+  const totalPrincipal = loan.schedule.reduce((acc, curr) => acc + curr.principalComponent, 0);
+  const totalInterest = loan.schedule.reduce((acc, curr) => acc + curr.interestComponent, 0);
+  const totalRepayment = totalPrincipal + totalInterest;
+
+  // Summary Box with drop shadow effect
+  doc.setFillColor(226, 232, 240);
+  doc.roundedRect(15, y + 1, 182, 45, 4, 4, 'F'); // shadow
+  doc.setFillColor(255, 255, 255);
+  doc.setDrawColor(203, 213, 225);
+  doc.roundedRect(14, y, 182, 45, 4, 4, 'FD'); // main box
+
+  doc.setFontSize(9);
+  
+  // Left Column
+  doc.setFont('helvetica', 'bold');
+  doc.setTextColor(100, 116, 139);
+  doc.text('Generated Date', 20, y + 10);
+  doc.text('Loan Amount', 20, y + 18);
+  doc.text('Annual Interest Rate', 20, y + 26);
+  doc.text('Loan Tenure', 20, y + 34);
+
   doc.setFont('helvetica', 'normal');
-  doc.setTextColor(51, 65, 85);
+  doc.setTextColor(15, 23, 42);
+  doc.text(formatDate(new Date().toISOString()), 65, y + 10);
+  doc.setFont('helvetica', 'bold');
+  doc.text(formatPDF_INR(loan.principalAmount), 65, y + 18);
+  doc.setFont('helvetica', 'normal');
+  doc.text(`${loan.interestRate}% p.a.`, 65, y + 26);
+  doc.text(`${loan.tenureMonths} Months`, 65, y + 34);
 
-  loan.schedule.slice(0, 24).forEach((inst, idx) => {
-    if (y > 250) {
+  // Right Column
+  doc.setFont('helvetica', 'bold');
+  doc.setTextColor(100, 116, 139);
+  doc.text('Monthly EMI', 115, y + 10);
+  doc.text('Total Interest', 115, y + 18);
+  doc.text('Total Amount Payable', 115, y + 26);
+
+  doc.setTextColor(15, 23, 42);
+  doc.text(formatPDF_INR(loan.monthlyEmi), 190, y + 10, { align: 'right' });
+  doc.setFont('helvetica', 'normal');
+  doc.text(formatPDF_INR(totalInterest), 190, y + 18, { align: 'right' });
+  doc.setFont('helvetica', 'bold');
+  doc.setTextColor(16, 185, 129); // emerald
+  doc.text(formatPDF_INR(totalRepayment), 190, y + 26, { align: 'right' });
+
+  // Visual Chart inside the box
+  const barY = y + 38;
+  const barWidth = 170;
+  const pRatio = totalPrincipal / totalRepayment;
+  const pWidth = barWidth * pRatio;
+  
+  doc.setFillColor(37, 99, 235);
+  doc.roundedRect(20, barY, pWidth, 3.5, 1.5, 1.5, 'F');
+  doc.setFillColor(245, 158, 11);
+  doc.roundedRect(20 + pWidth - 1, barY, barWidth - pWidth + 1, 3.5, 1.5, 1.5, 'F');
+  
+  doc.setFontSize(7);
+  doc.setTextColor(37, 99, 235);
+  doc.text('■ Principal', 20, barY - 2);
+  doc.setTextColor(245, 158, 11);
+  doc.text('■ Interest', 50, barY - 2);
+
+  y += 55;
+
+  const drawTableHeader = (startY: number) => {
+    doc.setFillColor(11, 25, 44); // deep navy
+    doc.roundedRect(14, startY, 182, 10, 2, 2, 'F');
+    doc.setTextColor(255, 255, 255);
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(8);
+    doc.text('EMI No.', 18, startY + 6.5);
+    doc.text('Payment Date', 36, startY + 6.5);
+    doc.text('Opening Balance', 78, startY + 6.5, { align: 'right' });
+    doc.text('Principal', 104, startY + 6.5, { align: 'right' });
+    doc.text('Interest', 128, startY + 6.5, { align: 'right' });
+    doc.text('EMI', 154, startY + 6.5, { align: 'right' });
+    doc.text('Closing Balance', 192, startY + 6.5, { align: 'right' });
+  };
+
+  drawTableHeader(y);
+  y += 10;
+  
+  doc.setFontSize(8);
+
+  loan.schedule.forEach((inst, idx) => {
+    if (y > 260) {
       doc.addPage();
+      drawWatermark();
       drawHeader(doc, settings, 'Repayment Schedule (Contd.)');
-      y = 45;
+      y = 48;
+      drawTableHeader(y);
+      y += 10;
+      doc.setFontSize(8);
     }
-    const bg = idx % 2 === 0 ? 255 : 248;
-    doc.setFillColor(bg, bg, bg);
-    doc.rect(14, y, 182, 6, 'F');
+    
+    // Zebra striping
+    if (idx % 2 === 0) {
+      doc.setFillColor(248, 250, 252);
+      doc.rect(14, y, 182, 9, 'F');
+    }
 
-    doc.text(`${inst.installmentNumber}`, 16, y + 4.5);
-    doc.text(formatDate(inst.dueDate), 32, y + 4.5);
-    doc.text(formatINR(inst.openingPrincipal), 62, y + 4.5);
-    doc.text(formatINR(inst.emiAmount), 95, y + 4.5);
-    doc.text(formatINR(inst.principalComponent), 125, y + 4.5);
-    doc.text(formatINR(inst.interestComponent), 155, y + 4.5);
-    doc.text(inst.status.toUpperCase(), 182, y + 4.5);
+    // Left edge accent
+    doc.setFillColor(203, 213, 225);
+    doc.rect(14, y, 2, 9, 'F');
 
-    y += 6.5;
+    doc.setFont('helvetica', 'bold');
+    doc.setTextColor(15, 23, 42);
+    doc.text(`${inst.installmentNumber}`, 20, y + 6);
+    
+    doc.setFont('helvetica', 'normal');
+    doc.setTextColor(100, 116, 139);
+    doc.text(formatDate(inst.dueDate), 36, y + 6);
+    
+    doc.setTextColor(51, 65, 85);
+    doc.text(formatPDF_INR(inst.openingPrincipal), 78, y + 6, { align: 'right' });
+    
+    doc.setTextColor(15, 23, 42);
+    doc.text(formatPDF_INR(inst.principalComponent), 104, y + 6, { align: 'right' });
+    
+    doc.setTextColor(71, 85, 105);
+    doc.text(formatPDF_INR(inst.interestComponent), 128, y + 6, { align: 'right' });
+    
+    doc.setFont('helvetica', 'bold');
+    doc.setTextColor(16, 185, 129); // emerald for EMI
+    doc.text(formatPDF_INR(inst.emiAmount), 154, y + 6, { align: 'right' });
+    
+    doc.setFont('helvetica', 'normal');
+    doc.setTextColor(100, 116, 139);
+    doc.text(formatPDF_INR(inst.closingPrincipal), 192, y + 6, { align: 'right' });
+
+    y += 9;
   });
+
+  // Footer Totals
+  if (y > 255) {
+    doc.addPage();
+    drawWatermark();
+    drawHeader(doc, settings, 'Repayment Schedule (Contd.)');
+    y = 48;
+  }
+  
+  y += 4;
+  doc.setFillColor(11, 25, 44);
+  doc.roundedRect(14, y, 182, 10, 2, 2, 'F');
+  
+  doc.setFont('helvetica', 'bold');
+  doc.setTextColor(255, 255, 255);
+  doc.setFontSize(9);
+  
+  doc.text('TOTAL REPAYMENT', 18, y + 6.5);
+  doc.text(formatPDF_INR(totalPrincipal), 104, y + 6.5, { align: 'right' });
+  doc.text(formatPDF_INR(totalInterest), 128, y + 6.5, { align: 'right' });
+  doc.setTextColor(16, 185, 129); // emerald accent
+  doc.text(formatPDF_INR(totalRepayment), 154, y + 6.5, { align: 'right' });
 
   drawFooter(doc, settings, `SCH-${loan.accountNumber}`);
 

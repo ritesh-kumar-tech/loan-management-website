@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { calculateEmi, formatINR } from '../../utils/calculator';
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, Legend } from 'recharts';
-import { Calculator, ArrowRight, Download, RotateCcw, Share2, Plus, Minus } from 'lucide-react';
+import { Calculator, ArrowRight, Download, RotateCcw, Share2, Plus, Minus, Loader2, CheckCircle } from 'lucide-react';
 import { generateRepaymentSchedulePDF } from '../../utils/pdfGenerator';
 import { CompanySettings, LoanProduct } from '../../types';
 
@@ -33,6 +33,8 @@ export const EmiCalculator: React.FC<EmiCalculatorProps> = ({ settings, products
   const [processingFeePercent, setProcessingFeePercent] = useState<number>(selectedProduct?.processingFeePercent || 1.5);
   const [firstEmiDate, setFirstEmiDate] = useState<string>(() => new Date(Date.now() + 30 * 24 * 3600 * 1000).toISOString().slice(0, 10));
   const [showFullSchedule, setShowFullSchedule] = useState(false);
+  const [isDownloading, setIsDownloading] = useState(false);
+  const [downloadSuccess, setDownloadSuccess] = useState(false);
 
   useEffect(() => {
     if (!selectedProduct) return;
@@ -58,37 +60,47 @@ export const EmiCalculator: React.FC<EmiCalculatorProps> = ({ settings, products
   };
 
   const downloadSchedule = () => {
-    generateRepaymentSchedulePDF({
-      accountNumber: 'EMI-PREVIEW',
-      applicationId: 'PREVIEW',
-      userId: 'preview',
-      customerName: 'Prospective Applicant',
-      loanType: selectedProduct?.type || 'personal',
-      principalAmount: loanAmount,
-      interestRate,
-      tenureMonths,
-      monthlyEmi: result.monthlyEmi,
-      startDate: new Date().toISOString(),
-      maturityDate: new Date(Date.now() + tenureMonths * 30 * 24 * 3600 * 1000).toISOString(),
-      processingFee: result.processingFeeAmount,
-      outstandingPrincipal: loanAmount,
-      totalPaid: 0,
-      totalOverdue: 0,
-      status: 'active',
-      createdAt: new Date().toISOString(),
-      schedule: result.schedule.map((row, idx) => ({
-        installmentNumber: row.month,
-        dueDate: addMonths(firstEmiDate, idx),
-        openingPrincipal: row.openingPrincipal,
-        emiAmount: row.emi,
-        principalComponent: row.principalPayment,
-        interestComponent: row.interestPayment,
-        charges: 0,
-        closingPrincipal: row.closingPrincipal,
-        status: idx === 0 ? 'due' : 'upcoming',
-        paidAmount: 0,
-      })),
-    } as any, settings);
+    setIsDownloading(true);
+    setTimeout(() => {
+      try {
+        generateRepaymentSchedulePDF({
+          accountNumber: 'EMI-PREVIEW',
+          applicationId: 'PREVIEW',
+          userId: 'preview',
+          customerName: 'Prospective Applicant',
+          loanType: selectedProduct?.type || 'personal',
+          principalAmount: loanAmount,
+          interestRate,
+          tenureMonths,
+          monthlyEmi: result.monthlyEmi,
+          startDate: new Date().toISOString(),
+          maturityDate: new Date(Date.now() + tenureMonths * 30 * 24 * 3600 * 1000).toISOString(),
+          processingFee: result.processingFeeAmount,
+          outstandingPrincipal: loanAmount,
+          totalPaid: 0,
+          totalOverdue: 0,
+          status: 'active',
+          createdAt: new Date().toISOString(),
+          schedule: result.schedule.map((row, idx) => ({
+            installmentNumber: row.month,
+            dueDate: addMonths(firstEmiDate, idx),
+            openingPrincipal: row.openingPrincipal,
+            emiAmount: row.emi,
+            principalComponent: row.principalPayment,
+            interestComponent: row.interestPayment,
+            charges: 0,
+            closingPrincipal: row.closingPrincipal,
+            status: idx === 0 ? 'due' : 'upcoming',
+            paidAmount: 0,
+          })),
+        } as any, settings);
+        setDownloadSuccess(true);
+      } catch (err) {
+        console.error('Failed to generate PDF:', err);
+      } finally {
+        setIsDownloading(false);
+      }
+    }, 100);
   };
 
   const exportCsv = () => {
@@ -173,8 +185,8 @@ export const EmiCalculator: React.FC<EmiCalculatorProps> = ({ settings, products
                   <Summary label="Est. Processing Fee" value={formatINR(result.processingFeeAmount)} />
                 </div>
                 <div className="mt-6 grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <button onClick={downloadSchedule} className="df-btn bg-white/10 hover:bg-white/15 text-white border border-white/15">
-                    <Download className="w-4 h-4" /> Download Schedule
+                  <button onClick={downloadSchedule} disabled={isDownloading} className="df-btn bg-white/10 hover:bg-white/15 text-white border border-white/15 disabled:opacity-50">
+                    {isDownloading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />} {isDownloading ? 'Processing...' : 'Download Schedule'}
                   </button>
                   {onApplyWithValues && (
                     <button onClick={() => onApplyWithValues(loanAmount, tenureMonths)} className="df-btn bg-blue-500 hover:bg-blue-400 text-white">
@@ -210,7 +222,9 @@ export const EmiCalculator: React.FC<EmiCalculatorProps> = ({ settings, products
             </div>
             <div className="flex flex-wrap gap-2">
               <button onClick={() => setShowFullSchedule(!showFullSchedule)} className="min-h-11 px-4 rounded-xl bg-blue-50 text-blue-700 font-bold text-sm">{showFullSchedule ? 'Show First 12' : 'View Full Schedule'}</button>
-              <button onClick={downloadSchedule} className="min-h-11 px-4 rounded-xl bg-blue-700 text-white font-bold text-sm">Download PDF</button>
+              <button onClick={downloadSchedule} disabled={isDownloading} className="min-h-11 px-4 rounded-xl bg-blue-700 text-white font-bold text-sm inline-flex items-center gap-2 disabled:opacity-50">
+                {isDownloading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />} {isDownloading ? 'Processing...' : 'Download PDF'}
+              </button>
               <button onClick={exportCsv} className="min-h-11 px-4 rounded-xl bg-white border border-blue-100 text-blue-700 font-bold text-sm">Export CSV</button>
               <button onClick={shareCalculation} className="min-h-11 px-4 rounded-xl bg-white border border-blue-100 text-blue-700 font-bold text-sm inline-flex items-center gap-2"><Share2 className="w-4 h-4" /> Share</button>
             </div>
@@ -262,6 +276,76 @@ export const EmiCalculator: React.FC<EmiCalculatorProps> = ({ settings, products
           </div>
         </div>
       </div>
+
+      {downloadSuccess && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/50 backdrop-blur-sm">
+          <div className="bg-white rounded-3xl p-6 sm:p-8 max-w-md w-full shadow-2xl relative overflow-hidden text-center">
+            <div className="w-20 h-20 bg-emerald-100 rounded-full flex items-center justify-center mx-auto mb-6">
+              <CheckCircle className="w-10 h-10 text-emerald-600" />
+            </div>
+            <h2 className="text-2xl font-black text-slate-900 mb-2">Repayment Schedule Downloaded</h2>
+            <p className="text-slate-600 text-sm mb-8">
+              Your EMI repayment schedule has been generated and downloaded successfully.
+            </p>
+
+            <div className="bg-slate-50 border border-slate-200 rounded-2xl p-4 text-left space-y-3 mb-8 text-sm">
+              <div className="flex justify-between border-b border-slate-200 pb-2">
+                <span className="text-slate-500">Loan Amount</span>
+                <strong className="text-slate-900">{formatINR(loanAmount)}</strong>
+              </div>
+              <div className="flex justify-between border-b border-slate-200 pb-2">
+                <span className="text-slate-500">Interest Rate</span>
+                <strong className="text-slate-900">{interestRate}% p.a.</strong>
+              </div>
+              <div className="flex justify-between border-b border-slate-200 pb-2">
+                <span className="text-slate-500">Tenure</span>
+                <strong className="text-slate-900">{tenureMonths} Months</strong>
+              </div>
+              <div className="flex justify-between border-b border-slate-200 pb-2">
+                <span className="text-slate-500">Monthly EMI</span>
+                <strong className="text-slate-900">{formatINR(result.monthlyEmi)}</strong>
+              </div>
+              <div className="flex justify-between border-b border-slate-200 pb-2">
+                <span className="text-slate-500">Total Interest</span>
+                <strong className="text-amber-700">{formatINR(result.totalInterest)}</strong>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-slate-500">Total Payable</span>
+                <strong className="text-slate-900">{formatINR(result.totalPayment)}</strong>
+              </div>
+            </div>
+
+            <div className="space-y-3">
+              {onApplyWithValues && (
+                <button 
+                  onClick={() => {
+                    setDownloadSuccess(false);
+                    onApplyWithValues(loanAmount, tenureMonths);
+                  }} 
+                  className="w-full bg-blue-700 hover:bg-blue-800 text-white font-bold py-3.5 rounded-xl transition-colors"
+                >
+                  Continue Application
+                </button>
+              )}
+              <button 
+                onClick={() => {
+                  setDownloadSuccess(false);
+                  downloadSchedule();
+                }} 
+                className="w-full bg-white border-2 border-slate-200 hover:bg-slate-50 text-slate-700 font-bold py-3 rounded-xl transition-colors"
+              >
+                Download Again
+              </button>
+              <button 
+                onClick={() => setDownloadSuccess(false)} 
+                className="w-full text-slate-500 hover:text-slate-700 font-semibold py-2 text-sm"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </section>
   );
 };
