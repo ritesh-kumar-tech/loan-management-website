@@ -19,10 +19,10 @@ export const Hero: React.FC<HeroProps> = ({ settings, products, cms, onApplyNow,
   const selectedProduct = activeProducts.find((product) => product.id === productId) || firstProduct;
   const [amount, setAmount] = useState(selectedProduct?.minAmount || 250000);
   const [tenure, setTenure] = useState(selectedProduct?.minTenureMonths || 24);
-  const [purpose, setPurpose] = useState('Personal expenses');
+  const [purpose, setPurpose] = useState('');
   const [employmentType, setEmploymentType] = useState('salaried');
-  const [monthlyIncome, setMonthlyIncome] = useState(60000);
-  const [existingEmi, setExistingEmi] = useState(0);
+  const [monthlyIncome, setMonthlyIncome] = useState<number | ''>('');
+  const [existingEmi, setExistingEmi] = useState<number | ''>('');
 
   const handleProductChange = (nextId: string) => {
     const product = activeProducts.find((item) => item.id === nextId);
@@ -117,20 +117,20 @@ export const Hero: React.FC<HeroProps> = ({ settings, products, cms, onApplyNow,
                 </label>
 
                 <label className="block">
-                  <span className="text-xs font-bold text-slate-700 uppercase tracking-wider block mb-2">Required Amount</span>
-                  <input type="number" min={selectedProduct?.minAmount} max={selectedProduct?.maxAmount} value={amount} onChange={(e) => setAmount(Number(e.target.value))} className="w-full min-h-12 rounded-xl border border-blue-100 px-3 text-sm font-bold" />
+                  <span className="text-xs font-bold text-slate-700 uppercase tracking-wider block mb-2">Required Amount *</span>
+                  <input type="number" required min={selectedProduct?.minAmount} max={selectedProduct?.maxAmount} value={amount} onChange={(e) => setAmount(Number(e.target.value))} className="w-full min-h-12 rounded-xl border border-blue-100 px-3 text-sm font-bold" />
                   <span className="text-[11px] text-slate-500 mt-1 block">{selectedProduct ? `${formatINR(selectedProduct.minAmount)} to ${formatINR(selectedProduct.maxAmount)}` : 'Admin configured range'}</span>
                 </label>
 
                 <label className="block">
-                  <span className="text-xs font-bold text-slate-700 uppercase tracking-wider block mb-2">Preferred Tenure</span>
-                  <input type="number" min={selectedProduct?.minTenureMonths} max={selectedProduct?.maxTenureMonths} value={tenure} onChange={(e) => setTenure(Number(e.target.value))} className="w-full min-h-12 rounded-xl border border-blue-100 px-3 text-sm font-bold" />
+                  <span className="text-xs font-bold text-slate-700 uppercase tracking-wider block mb-2">Preferred Tenure *</span>
+                  <input type="number" required min={selectedProduct?.minTenureMonths} max={selectedProduct?.maxTenureMonths} value={tenure} onChange={(e) => setTenure(Number(e.target.value))} className="w-full min-h-12 rounded-xl border border-blue-100 px-3 text-sm font-bold" />
                   <span className="text-[11px] text-slate-500 mt-1 block">{selectedProduct ? `${selectedProduct.minTenureMonths}-${selectedProduct.maxTenureMonths} months` : 'Configured tenure'}</span>
                 </label>
 
                 <label className="block">
-                  <span className="text-xs font-bold text-slate-700 uppercase tracking-wider block mb-2">Employment Type</span>
-                  <select value={employmentType} onChange={(e) => setEmploymentType(e.target.value)} className="w-full min-h-12 rounded-xl border border-blue-100 px-3 text-sm font-semibold bg-white">
+                  <span className="text-xs font-bold text-slate-700 uppercase tracking-wider block mb-2">Employment Type *</span>
+                  <select required value={employmentType} onChange={(e) => setEmploymentType(e.target.value)} className="w-full min-h-12 rounded-xl border border-blue-100 px-3 text-sm font-semibold bg-white">
                     <option value="salaried">Salaried</option>
                     <option value="self_employed_biz">Self-employed business</option>
                     <option value="self_employed_pro">Self-employed professional</option>
@@ -139,18 +139,18 @@ export const Hero: React.FC<HeroProps> = ({ settings, products, cms, onApplyNow,
                 </label>
 
                 <label className="block">
-                  <span className="text-xs font-bold text-slate-700 uppercase tracking-wider block mb-2">Monthly Income</span>
-                  <input type="number" value={monthlyIncome} onChange={(e) => setMonthlyIncome(Number(e.target.value))} className="w-full min-h-12 rounded-xl border border-blue-100 px-3 text-sm font-bold" />
+                  <span className="text-xs font-bold text-slate-700 uppercase tracking-wider block mb-2">Monthly Income *</span>
+                  <input type="number" required value={monthlyIncome} placeholder="e.g. 50000" onChange={(e) => setMonthlyIncome(e.target.value ? Number(e.target.value) : '')} className="w-full min-h-12 rounded-xl border border-blue-100 px-3 text-sm font-bold" />
                 </label>
 
                 <label className="block">
-                  <span className="text-xs font-bold text-slate-700 uppercase tracking-wider block mb-2">Existing Monthly EMI</span>
-                  <input type="number" value={existingEmi} onChange={(e) => setExistingEmi(Number(e.target.value))} className="w-full min-h-12 rounded-xl border border-blue-100 px-3 text-sm font-bold" />
+                  <span className="text-xs font-bold text-slate-700 uppercase tracking-wider block mb-2">Existing Monthly EMI *</span>
+                  <input type="number" required value={existingEmi} placeholder="e.g. 0" onChange={(e) => setExistingEmi(e.target.value ? Number(e.target.value) : '')} className="w-full min-h-12 rounded-xl border border-blue-100 px-3 text-sm font-bold" />
                 </label>
 
                 <label className="block">
-                  <span className="text-xs font-bold text-slate-700 uppercase tracking-wider block mb-2">Purpose</span>
-                  <input type="text" value={purpose} onChange={(e) => setPurpose(e.target.value)} className="w-full min-h-12 rounded-xl border border-blue-100 px-3 text-sm" />
+                  <span className="text-xs font-bold text-slate-700 uppercase tracking-wider block mb-2">Purpose *</span>
+                  <input type="text" required value={purpose} placeholder="e.g. Personal expenses" onChange={(e) => setPurpose(e.target.value)} className="w-full min-h-12 rounded-xl border border-blue-100 px-3 text-sm" />
                 </label>
               </div>
 

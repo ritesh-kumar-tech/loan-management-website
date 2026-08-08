@@ -65,11 +65,11 @@ export const ProductManagementView: React.FC<ProductManagementViewProps> = ({
     setPType('personal');
     setPTagline('');
     setPMinAmt(20000);
-    setPMaxAmt(500000);
+    setPMaxAmt(2500000);
     setPMinRate(6);
     setPMaxRate(18.0);
     setPMinTenure(6);
-    setPMaxTenure(36);
+    setPMaxTenure(120);
     setPFee(1.5);
     setPMinIncome(25000);
     setPMinAge(21);

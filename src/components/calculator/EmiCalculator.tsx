@@ -32,7 +32,6 @@ export const EmiCalculator: React.FC<EmiCalculatorProps> = ({ settings, products
   const [tenureMonths, setTenureMonths] = useState<number>(selectedProduct?.minTenureMonths || 36);
   const [processingFeePercent, setProcessingFeePercent] = useState<number>(selectedProduct?.processingFeePercent || 1.5);
   const [firstEmiDate, setFirstEmiDate] = useState<string>(() => new Date(Date.now() + 30 * 24 * 3600 * 1000).toISOString().slice(0, 10));
-  const [showFullSchedule, setShowFullSchedule] = useState(false);
   const [isDownloading, setIsDownloading] = useState(false);
   const [downloadSuccess, setDownloadSuccess] = useState(false);
 
@@ -50,7 +49,6 @@ export const EmiCalculator: React.FC<EmiCalculatorProps> = ({ settings, products
     { name: 'Principal Amount', value: loanAmount, color: '#0B5ED7' },
     { name: 'Total Interest Payable', value: result.totalInterest, color: '#1E88FF' },
   ];
-  const shownSchedule = showFullSchedule ? result.schedule : result.schedule.slice(0, 12);
 
   const reset = () => {
     setLoanAmount(selectedProduct?.minAmount || 500000);
@@ -103,25 +101,6 @@ export const EmiCalculator: React.FC<EmiCalculatorProps> = ({ settings, products
     }, 100);
   };
 
-  const exportCsv = () => {
-    const rows = ['Month,Due Date,Opening Principal,EMI,Principal,Interest,Closing Principal'];
-    result.schedule.forEach((row) => {
-      rows.push([row.month, addMonths(firstEmiDate, row.month - 1).slice(0, 10), row.openingPrincipal, row.emi, row.principalPayment, row.interestPayment, row.closingPrincipal].join(','));
-    });
-    const blob = new Blob([rows.join('\n')], { type: 'text/csv;charset=utf-8;' });
-    const link = document.createElement('a');
-    link.href = URL.createObjectURL(blob);
-    link.download = 'emi-schedule-preview.csv';
-    link.click();
-    URL.revokeObjectURL(link.href);
-  };
-
-  const shareCalculation = async () => {
-    const text = `${settings.companyName} EMI estimate: ${formatINR(result.monthlyEmi)}/month for ${formatINR(loanAmount)} at ${interestRate}% p.a. for ${tenureMonths} months.`;
-    if (navigator.share) await navigator.share({ title: 'EMI estimate', text });
-    else await navigator.clipboard?.writeText(text);
-  };
-
   return (
     <section className="bg-[#F6FAFF] border-b border-blue-100 df-section">
       <div className="df-container">
@@ -155,9 +134,9 @@ export const EmiCalculator: React.FC<EmiCalculatorProps> = ({ settings, products
               </select>
             </div>
 
-            <Slider label="Loan Amount Required" valueLabel={formatINR(loanAmount)} min={selectedProduct?.minAmount || 25000} max={selectedProduct?.maxAmount || 5000000} step={25000} value={loanAmount} onChange={setLoanAmount} presets={[100000, 300000, 500000, 1000000]} />
+            <Slider label="Loan Amount Required" valueLabel={formatINR(loanAmount)} min={selectedProduct?.minAmount || 25000} max={selectedProduct?.maxAmount || 5000000} step={25000} value={loanAmount} onChange={setLoanAmount} presets={[100000, 300000, 500000, 1000000, 2500000].filter((value) => value >= (selectedProduct?.minAmount || 25000) && value <= (selectedProduct?.maxAmount || 5000000))} />
             <Slider label="Annual Interest Rate (% p.a.)" valueLabel={`${interestRate}%`} min={minRate} max={maxRate} step={0.25} value={interestRate} onChange={setInterestRate} helper={`${minRate}% minimum for selected product. Final rate depends on eligibility and lending policy.`} presets={[minRate, Math.min(maxRate, minRate + 2), Math.min(maxRate, minRate + 4)]} />
-            <Slider label="Loan Tenure" valueLabel={`${tenureMonths} Months`} min={selectedProduct?.minTenureMonths || 12} max={selectedProduct?.maxTenureMonths || 120} step={6} value={tenureMonths} onChange={setTenureMonths} presets={[12, 24, 36, 60].filter((value) => value >= (selectedProduct?.minTenureMonths || 12) && value <= (selectedProduct?.maxTenureMonths || 120))} />
+            <Slider label="Loan Tenure" valueLabel={`${tenureMonths} Months`} min={selectedProduct?.minTenureMonths || 12} max={selectedProduct?.maxTenureMonths || 120} step={6} value={tenureMonths} onChange={setTenureMonths} presets={[12, 24, 36, 60, 120].filter((value) => value >= (selectedProduct?.minTenureMonths || 12) && value <= (selectedProduct?.maxTenureMonths || 120))} />
 
             <div>
               <label className="text-sm font-semibold text-slate-700 block mb-2">First EMI Date</label>
@@ -211,68 +190,6 @@ export const EmiCalculator: React.FC<EmiCalculatorProps> = ({ settings, products
                 </ResponsiveContainer>
               </div>
             </div>
-          </div>
-        </div>
-
-        <div className="mt-12 bg-white rounded-[24px] border border-blue-100 p-6 shadow-sm">
-          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-6">
-            <div>
-              <h3 className="text-lg font-bold text-slate-950">First 12 Months Repayment Schedule Preview</h3>
-              <p className="text-xs text-slate-500">Monthly breakdown of interest vs principal repayment</p>
-            </div>
-            <div className="flex flex-wrap gap-2">
-              <button onClick={() => setShowFullSchedule(!showFullSchedule)} className="min-h-11 px-4 rounded-xl bg-blue-50 text-blue-700 font-bold text-sm">{showFullSchedule ? 'Show First 12' : 'View Full Schedule'}</button>
-              <button onClick={downloadSchedule} disabled={isDownloading} className="min-h-11 px-4 rounded-xl bg-blue-700 text-white font-bold text-sm inline-flex items-center gap-2 disabled:opacity-50">
-                {isDownloading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />} {isDownloading ? 'Processing...' : 'Download PDF'}
-              </button>
-              <button onClick={exportCsv} className="min-h-11 px-4 rounded-xl bg-white border border-blue-100 text-blue-700 font-bold text-sm">Export CSV</button>
-              <button onClick={shareCalculation} className="min-h-11 px-4 rounded-xl bg-white border border-blue-100 text-blue-700 font-bold text-sm inline-flex items-center gap-2"><Share2 className="w-4 h-4" /> Share</button>
-            </div>
-          </div>
-          <div className="hidden md:block overflow-x-auto">
-            <table className="w-full text-left text-sm">
-              <thead className="bg-blue-50 text-blue-950 text-xs font-bold uppercase border-b border-blue-100 sticky top-0">
-                <tr>
-                  <th className="py-3 px-4">Month</th>
-                  <th className="py-3 px-4">Due Date</th>
-                  <th className="py-3 px-4">Opening Principal</th>
-                  <th className="py-3 px-4">EMI</th>
-                  <th className="py-3 px-4">Principal Repaid</th>
-                  <th className="py-3 px-4">Interest Paid</th>
-                  <th className="py-3 px-4">Closing Principal</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100 text-slate-700">
-                {shownSchedule.map((row, idx) => (
-                  <tr key={row.month} className={`${idx % 2 ? 'bg-blue-50/25' : ''} hover:bg-blue-50/60 transition-colors`}>
-                    <td className="py-4 px-4 font-semibold text-slate-950">Month {row.month}</td>
-                    <td className="py-4 px-4">{addMonths(firstEmiDate, row.month - 1).slice(0, 10)}</td>
-                    <td className="py-4 px-4">{formatINR(row.openingPrincipal)}</td>
-                    <td className="py-4 px-4 font-bold text-slate-950">{formatINR(row.emi)}</td>
-                    <td className="py-4 px-4 text-blue-700 font-medium">{formatINR(row.principalPayment)}</td>
-                    <td className="py-4 px-4 text-amber-700">{formatINR(row.interestPayment)}</td>
-                    <td className="py-4 px-4">{formatINR(row.closingPrincipal)}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-          <div className="md:hidden space-y-3">
-            {shownSchedule.slice(0, 12).map((row) => (
-              <div key={row.month} className="rounded-2xl border border-blue-100 bg-blue-50/40 p-4">
-                <div className="flex items-center justify-between">
-                  <strong className="text-slate-950">Month {row.month}</strong>
-                  <span className="font-black text-slate-950">{formatINR(row.emi)}</span>
-                </div>
-                <div className="grid grid-cols-2 gap-3 mt-3 text-sm text-slate-600">
-                  <span>Due date <strong className="block text-slate-900">{addMonths(firstEmiDate, row.month - 1).slice(0, 10)}</strong></span>
-                  <span>Principal <strong className="block text-blue-700">{formatINR(row.principalPayment)}</strong></span>
-                  <span>Interest <strong className="block text-amber-700">{formatINR(row.interestPayment)}</strong></span>
-                  <span>Opening <strong className="block text-slate-900">{formatINR(row.openingPrincipal)}</strong></span>
-                  <span>Closing <strong className="block text-slate-900">{formatINR(row.closingPrincipal)}</strong></span>
-                </div>
-              </div>
-            ))}
           </div>
         </div>
       </div>
