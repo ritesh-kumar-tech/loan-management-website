@@ -20,9 +20,12 @@ import {
 import { calculateEmi, calculateFOIR } from './src/utils/calculator';
 import { ApplicationStatus, EligibilityResult, LoanApplication, Receipt, SupportTicket } from './src/types';
 
-async function startServer() {
+interface CreateAppOptions {
+  serveClient?: boolean;
+}
+
+export async function createApp({ serveClient = true }: CreateAppOptions = {}) {
   const app = express();
-  const PORT = Number(process.env.PORT) || 3000;
 
   app.use(express.json({ limit: '10mb' }));
 
@@ -848,24 +851,37 @@ async function startServer() {
   });
 
 
-  // Vite middleware for development
-  if (process.env.NODE_ENV !== 'production') {
-    const vite = await createViteServer({
-      server: { middlewareMode: true },
-      appType: 'spa',
-    });
-    app.use(vite.middlewares);
-  } else {
-    const distPath = path.join(process.cwd(), 'dist');
-    app.use(express.static(distPath));
-    app.get('*all', (req, res) => {
-      res.sendFile(path.join(distPath, 'index.html'));
-    });
+  if (serveClient) {
+    // Vite middleware for development
+    if (process.env.NODE_ENV !== 'production') {
+      const vite = await createViteServer({
+        server: { middlewareMode: true },
+        appType: 'spa',
+      });
+      app.use(vite.middlewares);
+    } else {
+      const distPath = path.join(process.cwd(), 'dist');
+      app.use(express.static(distPath));
+      app.get('*all', (req, res) => {
+        res.sendFile(path.join(distPath, 'index.html'));
+      });
+    }
   }
+
+  return app;
+}
+
+async function startServer() {
+  const app = await createApp();
+  const PORT = Number(process.env.PORT) || 3000;
 
   app.listen(PORT, '0.0.0.0', () => {
     console.log(`Server running on http://0.0.0.0:${PORT}`);
   });
 }
 
-startServer();
+const isMainModule = /(?:^|[\\/])server\.(?:ts|js|cjs)$/.test(process.argv[1] || '');
+
+if (isMainModule && !process.env.VERCEL) {
+  startServer();
+}
