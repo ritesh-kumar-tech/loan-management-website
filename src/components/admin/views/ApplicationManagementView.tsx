@@ -371,30 +371,50 @@ export const ApplicationManagementView: React.FC<ApplicationManagementViewProps>
 
             {/* Document Verification Section */}
             <div className="space-y-3">
-              <h4 className="font-extrabold text-slate-900 text-sm">Uploaded Documents Verification</h4>
+              <h4 className="font-extrabold text-slate-900 text-sm flex items-center justify-between">
+                <span>Uploaded Documents Verification</span>
+                <span className="text-xs font-semibold text-slate-500">
+                  {selectedApp.documents?.filter((d) => d.status === 'verified').length} of {selectedApp.documents?.length || 0} Verified
+                </span>
+              </h4>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
                 {selectedApp.documents?.map((doc) => (
-                  <div key={doc.id} className="bg-white p-3 rounded-2xl border border-slate-200 flex items-center justify-between gap-3 shadow-2xs">
-                    <div>
-                      <div className="font-bold text-slate-900">{doc.title}</div>
-                      <div className="text-[10px] text-slate-500">{doc.fileName}</div>
-                      <span className={`inline-block mt-1 text-[10px] font-bold uppercase px-2 py-0.5 rounded-md ${
-                        doc.status === 'verified' ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'
+                  <div key={doc.id} className="bg-white p-3 rounded-2xl border border-slate-200 flex flex-col justify-between gap-2 shadow-2xs">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <div className="font-bold text-slate-900">{doc.title}</div>
+                        <div className="text-[10px] text-slate-500">{doc.fileName}</div>
+                      </div>
+                      <span className={`text-[10px] font-bold uppercase px-2 py-0.5 rounded-md ${
+                        doc.status === 'verified' ? 'bg-emerald-100 text-emerald-800' : doc.status === 'rejected' ? 'bg-rose-100 text-rose-800' : 'bg-amber-100 text-amber-800'
                       }`}>
                         {doc.status}
                       </span>
                     </div>
 
-                    <div className="flex items-center gap-1">
+                    {doc.rejectionNote && (
+                      <div className="text-[11px] text-rose-700 font-medium bg-rose-50 p-1.5 rounded-lg border border-rose-100">
+                        Reason: {doc.rejectionNote}
+                      </div>
+                    )}
+
+                    <div className="flex items-center gap-1 pt-1 border-t border-slate-100">
                       <button
                         onClick={() => handleDocVerify(doc.id, 'verified')}
-                        className="px-2.5 py-1 rounded-lg bg-blue-700 hover:bg-blue-800 text-white font-bold text-[10px] cursor-pointer"
+                        className="flex-1 py-1 rounded-lg bg-blue-700 hover:bg-blue-800 text-white font-bold text-[10px] cursor-pointer"
                       >
                         Verify
                       </button>
                       <button
-                        onClick={() => handleDocVerify(doc.id, 'rejected')}
-                        className="px-2 py-1 rounded-lg bg-slate-100 hover:bg-rose-100 text-slate-700 hover:text-rose-700 font-bold text-[10px] cursor-pointer"
+                        onClick={() => {
+                          const note = prompt('Enter rejection reason for customer (e.g. Please upload latest 6-month statement):');
+                          if (note !== null) {
+                            onVerifyDocument(selectedApp.id, doc.id, 'rejected', note);
+                            const updatedDocs = selectedApp.documents.map(d => d.id === doc.id ? { ...d, status: 'rejected' as const, rejectionNote: note } : d);
+                            setSelectedApp({ ...selectedApp, documents: updatedDocs });
+                          }
+                        }}
+                        className="flex-1 py-1 rounded-lg bg-slate-100 hover:bg-rose-100 text-slate-700 hover:text-rose-700 font-bold text-[10px] cursor-pointer"
                       >
                         Reject
                       </button>
@@ -402,6 +422,78 @@ export const ApplicationManagementView: React.FC<ApplicationManagementViewProps>
                   </div>
                 ))}
               </div>
+            </div>
+
+            {/* Processing Fee Control Section */}
+            <div className="bg-sky-50 border border-sky-200 rounded-2xl p-4 space-y-3 text-xs">
+              <h4 className="font-bold text-sky-950 text-sm flex items-center gap-2">
+                <ShieldCheck className="w-4 h-4 text-sky-700" /> Processing Fee Management
+              </h4>
+
+              {selectedApp.documents?.some((d) => d.status !== 'verified') ? (
+                <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl text-amber-800 font-medium">
+                  <strong>Notice:</strong> All mandatory documents must be verified before the processing fee can be requested. ({selectedApp.documents?.filter((d) => d.status !== 'verified').length} document(s) pending).
+                </div>
+              ) : selectedApp.status === 'documents_verified' || selectedApp.status === 'submitted' || selectedApp.status === 'under_review' ? (
+                <div className="flex flex-col sm:flex-row items-center justify-between gap-3 bg-white p-3 rounded-xl border border-sky-100">
+                  <div>
+                    <span className="font-bold text-slate-900 block text-xs">All Documents Verified ✓</span>
+                    <span className="text-slate-500 text-[11px]">Request customer to pay loan application processing fee.</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="number"
+                      value={selectedApp.processingFee || 2000}
+                      onChange={(e) => setSelectedApp({ ...selectedApp, processingFee: Number(e.target.value) })}
+                      className="w-24 px-2 py-1.5 border border-slate-300 rounded-lg text-xs font-bold"
+                      placeholder="₹2000"
+                    />
+                    <button
+                      onClick={async () => {
+                        setIsActionLoading(true);
+                        try {
+                          const fee = selectedApp.processingFee || 2000;
+                          await onUpdateStatus(selectedApp.id, {
+                            status: 'processing_fee_pending',
+                            processingFee: fee,
+                            note: `Processing fee of ₹${fee} requested by Admin.`,
+                          });
+                          setSelectedApp({ ...selectedApp, status: 'processing_fee_pending', processingFee: fee });
+                        } finally {
+                          setIsActionLoading(false);
+                        }
+                      }}
+                      className="px-4 py-2 bg-sky-700 hover:bg-sky-800 text-white font-bold rounded-xl text-xs cursor-pointer shadow-xs"
+                    >
+                      Request Processing Fee
+                    </button>
+                  </div>
+                </div>
+              ) : selectedApp.status === 'processing_fee_submitted' ? (
+                <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-xl space-y-2 text-emerald-950">
+                  <div className="font-bold text-xs">Processing Fee Payment Submitted by Customer</div>
+                  <p className="text-[11px]">Amount: <strong>{formatINR(selectedApp.processingFee || 2000)}</strong>. Review payment submission proof in the Payments verification section.</p>
+                  <div className="flex gap-2 pt-1">
+                    <button
+                      onClick={async () => {
+                        await onUpdateStatus(selectedApp.id, {
+                          status: 'payment_verified',
+                          note: 'Processing fee payment verified by Admin.',
+                        });
+                        setSelectedApp({ ...selectedApp, status: 'payment_verified' });
+                      }}
+                      className="px-3 py-1.5 bg-emerald-700 hover:bg-emerald-800 text-white font-bold rounded-lg text-xs cursor-pointer"
+                    >
+                      Verify Processing Fee Payment
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <div className="p-3 bg-white rounded-xl border border-sky-100 text-slate-700 font-semibold flex items-center justify-between">
+                  <span>Processing Fee: <strong>{formatINR(selectedApp.processingFee || 2000)}</strong></span>
+                  <span className="text-emerald-700 font-bold uppercase text-[11px]">Status: {selectedApp.status.replace(/_/g, ' ')}</span>
+                </div>
+              )}
             </div>
 
             {/* Sanction & Terms Approval Form Box */}

@@ -110,7 +110,19 @@ export const api = {
     }
   },
 
-  async trackApplication(payload: { identifier?: string; applicationId?: string; contact?: string; otp: string }): Promise<{ success: boolean; application?: LoanApplication; error?: string }> {
+  async trackApplication(payload: { identifier?: string; applicationId?: string; contact?: string; otp?: string; stage?: number }): Promise<{
+    success: boolean;
+    stage?: number;
+    requiresOtp?: boolean;
+    applicationId?: string;
+    maskedMobile?: string;
+    applicantName?: string;
+    message?: string;
+    application?: LoanApplication;
+    loanAccount?: LoanAccount;
+    sessionToken?: string;
+    error?: string;
+  }> {
     const res = await fetch('/api/applications/track', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -147,6 +159,15 @@ export const api = {
     return data.application;
   },
 
+  async requestProcessingFee(id: string, feeAmount?: number): Promise<{ success: boolean; application?: LoanApplication; error?: string }> {
+    const res = await fetch(`/api/applications/${id}/request-processing-fee`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ feeAmount }),
+    });
+    return await res.json();
+  },
+
   async getLoanAccounts(userId?: string): Promise<LoanAccount[]> {
     try {
       const url = userId ? `/api/loan-accounts?userId=${userId}` : '/api/loan-accounts';
@@ -165,6 +186,7 @@ export const api = {
     userId: string;
     customerName: string;
     amount: number;
+    purpose?: string;
     utrNumber: string;
     proofScreenshotUrl?: string;
     installmentNumber?: number;

@@ -141,16 +141,27 @@ export const StepWizard: React.FC<StepWizardProps> = ({
         setStepError('Please enter your PAN card number.');
         return false;
       }
-      if (personal.panNumber.trim().length !== 10) {
-        setStepError('PAN card number must be exactly 10 characters.');
+      const panPattern = /^[A-Z]{5}[0-9]{4}[A-Z]{1}$/;
+      if (!panPattern.test(personal.panNumber.trim().toUpperCase())) {
+        setStepError('Please enter a valid 10-character PAN card number (e.g. ABCDE1234F).');
         return false;
       }
       if (!personal.mobile.trim()) {
         setStepError('Please enter your mobile number.');
         return false;
       }
+      const cleanMobile = personal.mobile.trim().replace(/\D/g, '');
+      if (cleanMobile.length !== 10) {
+        setStepError('Please enter a valid 10-digit mobile number.');
+        return false;
+      }
       if (!personal.email.trim()) {
         setStepError('Please enter your email address.');
+        return false;
+      }
+      const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      if (!emailPattern.test(personal.email.trim())) {
+        setStepError('Please enter a valid email address.');
         return false;
       }
       if (!personal.currentAddress.trim()) {
@@ -176,6 +187,11 @@ export const StepWizard: React.FC<StepWizardProps> = ({
       }
       if (!financial.ifscCode.trim()) {
         setStepError('Please enter your bank IFSC code.');
+        return false;
+      }
+      const ifscPattern = /^[A-Z]{4}0[A-Z0-9]{6}$/;
+      if (!ifscPattern.test(financial.ifscCode.trim().toUpperCase())) {
+        setStepError('Please enter a valid 11-character IFSC code (e.g. HDFC0001234).');
         return false;
       }
     } else if (step === 4) {

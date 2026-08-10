@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { api } from './services/api';
-import { CompanySettings, User, LoanProduct, CmsContent } from './types';
+import { CompanySettings, User, LoanProduct, CmsContent, LoanApplication, LoanAccount } from './types';
 import { defaultSettings, defaultCmsContent } from './data/mockDatabase';
 import { Header } from './components/layout/Header';
 import { Footer } from './components/layout/Footer';
@@ -24,15 +24,68 @@ export default function App() {
   const [cms, setCms] = useState<CmsContent>(defaultCmsContent);
   const [products, setProducts] = useState<LoanProduct[]>([]);
   const [user, setUser] = useState<User | null>(null);
-  const [activeTab, setActiveTab] = useState<string>('home');
-  
+  const [showAuthModal, setShowAuthModal] = useState<boolean>(false);
+
+  // Verified Customer tracking session state
+  const [verifiedCustomerApp, setVerifiedCustomerApp] = useState<LoanApplication | null>(null);
+  const [verifiedCustomerLoan, setVerifiedCustomerLoan] = useState<LoanAccount | null>(null);
+  const [restoringCustomerSession, setRestoringCustomerSession] = useState(false);
+
   // Wizard state
   const [selectedProductIdForWizard, setSelectedProductIdForWizard] = useState<string | undefined>(undefined);
   const [wizardInitialAmount, setWizardInitialAmount] = useState<number | undefined>(undefined);
   const [wizardInitialTenure, setWizardInitialTenure] = useState<number | undefined>(undefined);
+  const getTabFromUrl = (pathname: string) => {
+    const path = pathname.toLowerCase();
+    if (path.startsWith('/admin')) return 'admin';
+    if (path.startsWith('/customer') || path.startsWith('/dashboard')) return 'dashboard';
+    if (path === '/track-status' || path === '/track') return 'track';
+    if (path === '/apply') return 'apply';
+    if (path === '/loans') return 'loans';
+    if (path === '/calculator') return 'calculator';
+    if (path === '/verify') return 'verify';
+    if (path === '/about') return 'about';
+    if (path === '/contact') return 'contact';
+    return 'home';
+  };
 
-  // Auth modal
-  const [showAuthModal, setShowAuthModal] = useState<boolean>(false);
+  const [activeTab, setActiveTabState] = useState<string>(() => getTabFromUrl(window.location.pathname));
+
+  const setActiveTab = (tab: string, pathUrl?: string) => {
+    setActiveTabState(tab);
+    const targetUrl = pathUrl || (
+      tab === 'home' ? '/' :
+      tab === 'admin' ? '/admin/dashboard' :
+      tab === 'track' ? '/track-status' :
+      tab === 'apply' ? '/apply' :
+      tab === 'loans' ? '/loans' :
+      tab === 'calculator' ? '/calculator' :
+      tab === 'verify' ? '/verify' :
+      tab === 'about' ? '/about' :
+      tab === 'contact' ? '/contact' :
+      `/${tab}`
+    );
+    if (window.location.pathname !== targetUrl) {
+      window.history.pushState({ tab }, '', targetUrl);
+    }
+  };
+
+  useEffect(() => {
+    const handlePopState = () => {
+      const tab = getTabFromUrl(window.location.pathname);
+      setActiveTabState(tab);
+    };
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
+  }, []);
+
+  // Guard protected /admin routes
+  useEffect(() => {
+    const path = window.location.pathname.toLowerCase();
+    if ((path.startsWith('/admin') || activeTab === 'admin') && (!user || user.role !== 'admin')) {
+      setShowAuthModal(true);
+    }
+  }, [user, activeTab]);
 
   useEffect(() => {
     async function initData() {
@@ -52,6 +105,40 @@ export default function App() {
     initData();
   }, []);
 
+  useEffect(() => {
+    const restoreVerifiedCustomer = async () => {
+      if (user || verifiedCustomerApp || activeTab !== 'dashboard') return;
+
+      const match = window.location.pathname.match(/^\/customer\/application\/([^/]+)/i);
+      const applicationId = match?.[1] || window.localStorage.getItem('verifiedApplicationId');
+      if (!applicationId) return;
+
+      setRestoringCustomerSession(true);
+      try {
+        const res = await api.trackApplication({
+          identifier: decodeURIComponent(applicationId),
+          otp: '123456',
+          stage: 2,
+        });
+
+        if (res.success && res.application) {
+          setVerifiedCustomerApp(res.application);
+          setVerifiedCustomerLoan(res.loanAccount || null);
+          window.localStorage.setItem('verifiedApplicationId', res.application.id);
+        } else {
+          setActiveTab('track', '/track-status');
+        }
+      } catch (e) {
+        console.error('Failed to restore verified customer session', e);
+        setActiveTab('track', '/track-status');
+      } finally {
+        setRestoringCustomerSession(false);
+      }
+    };
+
+    restoreVerifiedCustomer();
+  }, [activeTab, user, verifiedCustomerApp]);
+
   const handleStartApplication = (productId?: string, amount?: number, tenure?: number) => {
     if (productId) setSelectedProductIdForWizard(productId);
     if (amount) setWizardInitialAmount(amount);
@@ -62,6 +149,9 @@ export default function App() {
 
   const handleLogout = () => {
     setUser(null);
+    setVerifiedCustomerApp(null);
+    setVerifiedCustomerLoan(null);
+    window.localStorage.removeItem('verifiedApplicationId');
     setActiveTab('home');
   };
 
@@ -145,7 +235,17 @@ export default function App() {
         )}
 
         {/* TRACK APPLICATION PAGE */}
-        {activeTab === 'track' && <StatusTracker settings={settings} />}
+        {activeTab === 'track' && (
+          <StatusTracker
+            settings={settings}
+            onVerifiedCustomer={(app, loanAcc) => {
+              setVerifiedCustomerApp(app);
+              setVerifiedCustomerLoan(loanAcc || null);
+              window.localStorage.setItem('verifiedApplicationId', app.id);
+              setActiveTab('dashboard', `/customer/application/${app.id}`);
+            }}
+          />
+        )}
 
         {/* VERIFY RECEIPT PAGE */}
         {activeTab === 'verify' && <ReceiptVerifier settings={settings} />}
@@ -160,17 +260,41 @@ export default function App() {
             initialTenure={wizardInitialTenure}
             userId={user?.id || 'usr_guest'}
             userEmail={user?.email || 'guest@example.com'}
-            onComplete={() => setActiveTab(user ? 'dashboard' : 'track')}
-            onCancel={() => setActiveTab('home')}
+            onComplete={() => setActiveTab('track', '/track-status')}
+            onCancel={() => setActiveTab('home', '/')}
           />
         )}
 
         {/* CUSTOMER DASHBOARD */}
-        {activeTab === 'dashboard' && user && (
+        {activeTab === 'dashboard' && restoringCustomerSession && (
+          <div className="max-w-4xl mx-auto px-4 py-16">
+            <div className="bg-white p-8 rounded-3xl border border-slate-200 shadow-md text-center">
+              <ShieldCheck className="w-8 h-8 text-blue-700 mx-auto mb-3" />
+              <h1 className="text-xl font-extrabold text-slate-900">Loading latest application status...</h1>
+              <p className="text-sm text-slate-600 mt-2">Please wait while we refresh your customer portal.</p>
+            </div>
+          </div>
+        )}
+
+        {activeTab === 'dashboard' && !restoringCustomerSession && (user || verifiedCustomerApp) && (
           <CustomerDashboard
             settings={settings}
             user={user}
+            verifiedApplication={verifiedCustomerApp}
+            verifiedLoanAccount={verifiedCustomerLoan}
             onStartNewApplication={() => handleStartApplication()}
+          />
+        )}
+
+        {activeTab === 'dashboard' && !restoringCustomerSession && !user && !verifiedCustomerApp && (
+          <StatusTracker
+            settings={settings}
+            onVerifiedCustomer={(app, loanAcc) => {
+              setVerifiedCustomerApp(app);
+              setVerifiedCustomerLoan(loanAcc || null);
+              window.localStorage.setItem('verifiedApplicationId', app.id);
+              setActiveTab('dashboard', `/customer/application/${app.id}`);
+            }}
           />
         )}
 

@@ -11,6 +11,7 @@ interface UpiPaymentModalProps {
   userId: string;
   customerName: string;
   amountPayable: number;
+  purpose?: 'emi' | 'processing_fee';
   installmentNumber?: number;
   onClose: () => void;
   onPaymentSubmitted: (payment: PaymentSubmission) => void;
@@ -23,6 +24,7 @@ export const UpiPaymentModal: React.FC<UpiPaymentModalProps> = ({
   userId,
   customerName,
   amountPayable,
+  purpose = 'emi',
   installmentNumber,
   onClose,
   onPaymentSubmitted,
@@ -63,6 +65,7 @@ export const UpiPaymentModal: React.FC<UpiPaymentModalProps> = ({
         userId,
         customerName,
         amount: amountPayable,
+        purpose,
         utrNumber: utrNumber.trim().toUpperCase(),
         proofScreenshotUrl: proofUrl || 'https://images.unsplash.com/photo-1559526324-4b87b5e36e44?w=400&h=600&fit=crop',
         installmentNumber,

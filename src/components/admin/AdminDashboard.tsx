@@ -164,7 +164,12 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ settings, onUpda
   const openTicketsCount = tickets.filter((ticket) => ticket.status === 'open' || ticket.status === 'in_progress').length;
 
   const navigationGroups: NavGroup[] = [
-    { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard, children: [{ id: 'dashboard', label: 'Dashboard Overview' }] },
+    {
+      id: 'dashboard',
+      label: 'Dashboard',
+      icon: LayoutDashboard,
+      children: [{ id: 'dashboard', label: 'Dashboard Overview' }],
+    },
     {
       id: 'applications',
       label: 'Applications',
@@ -172,11 +177,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ settings, onUpda
       badge: pendingAppsCount,
       children: [
         { id: 'applications', label: 'All Applications' },
-        { id: 'applications', label: 'New Applications' },
-        { id: 'applications', label: 'Under Review' },
         { id: 'documents', label: 'Document Verification' },
-        { id: 'applications', label: 'Approved Applications' },
-        { id: 'applications', label: 'Rejected Applications' },
       ],
     },
     {
@@ -186,8 +187,16 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ settings, onUpda
       badge: openTicketsCount,
       children: [
         { id: 'customers', label: 'Customer Directory' },
-        { id: 'customers', label: 'Customer Details' },
         { id: 'support', label: 'Support Requests' },
+      ],
+    },
+    {
+      id: 'loans',
+      label: 'Loans & EMI',
+      icon: Building2,
+      children: [
+        { id: 'loans', label: 'Active Loans & Portfolio' },
+        { id: 'products', label: 'Loan Products Catalog' },
       ],
     },
     {
@@ -196,60 +205,25 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ settings, onUpda
       icon: CreditCard,
       badge: pendingPaymentsCount,
       children: [
-        { id: 'payments', label: 'Processing Fee Requests' },
         { id: 'payments', label: 'Payment Verification' },
-        { id: 'payments', label: 'Payment History' },
         { id: 'receipts', label: 'Official Receipts' },
-      ],
-    },
-    {
-      id: 'loans',
-      label: 'Loans & EMI',
-      icon: Building2,
-      children: [
-        { id: 'loans', label: 'Active Loans' },
-        { id: 'loans', label: 'Loan Disbursements' },
-        { id: 'loans', label: 'EMI Schedule' },
-        { id: 'loans', label: 'EMI Payments' },
-        { id: 'loans', label: 'Overdue Payments' },
-        { id: 'products', label: 'Loan Products' },
       ],
     },
     {
       id: 'reports',
       label: 'Reports',
       icon: BarChart3,
-      children: [
-        { id: 'reports', label: 'Application Reports' },
-        { id: 'reports', label: 'Payment Reports' },
-        { id: 'reports', label: 'Collection Reports' },
-        { id: 'reports', label: 'Loan Portfolio' },
-        { id: 'reports', label: 'EMI and Overdue Reports' },
-        { id: 'reports', label: 'Export Reports' },
-      ],
-    },
-    {
-      id: 'website',
-      label: 'Website',
-      icon: Globe,
-      children: [
-        { id: 'cms', label: 'Website Content' },
-        { id: 'products', label: 'Loan Products Display' },
-        { id: 'cms', label: 'FAQ Management' },
-        { id: 'support', label: 'Contact Enquiries' },
-      ],
+      children: [{ id: 'reports', label: 'Financial & Loan Reports' }],
     },
     {
       id: 'settings',
-      label: 'Settings',
+      label: 'Website & Settings',
       icon: Settings,
       children: [
-        { id: 'staff', label: 'Staff Accounts' },
-        { id: 'staff', label: 'Roles and Permissions' },
-        { id: 'settings', label: 'Notification Settings' },
-        { id: 'settings', label: 'Email Templates' },
-        { id: 'settings', label: 'General Settings' },
-        { id: 'audit', label: 'Activity Logs' },
+        { id: 'cms', label: 'Website CMS' },
+        { id: 'settings', label: 'Company Settings' },
+        { id: 'staff', label: 'Staff Management' },
+        { id: 'audit', label: 'Audit Logs' },
       ],
     },
   ];

@@ -24,24 +24,29 @@ import {
 
 interface CustomerDashboardProps {
   settings: CompanySettings;
-  user: User;
+  user?: User | null;
+  verifiedApplication?: LoanApplication | null;
+  verifiedLoanAccount?: LoanAccount | null;
   onStartNewApplication: () => void;
 }
 
 export const CustomerDashboard: React.FC<CustomerDashboardProps> = ({
   settings,
   user,
+  verifiedApplication,
+  verifiedLoanAccount,
   onStartNewApplication,
 }) => {
   const [activeTab, setActiveTab] = useState<'overview' | 'applications' | 'loans' | 'payments' | 'tickets'>('overview');
-  const [applications, setApplications] = useState<LoanApplication[]>([]);
-  const [loanAccounts, setLoanAccounts] = useState<LoanAccount[]>([]);
+  const [applications, setApplications] = useState<LoanApplication[]>(verifiedApplication ? [verifiedApplication] : []);
+  const [loanAccounts, setLoanAccounts] = useState<LoanAccount[]>(verifiedLoanAccount ? [verifiedLoanAccount] : []);
   const [payments, setPayments] = useState<PaymentSubmission[]>([]);
   const [tickets, setTickets] = useState<SupportTicket[]>([]);
   const [loading, setLoading] = useState(true);
 
   // Modal payment
   const [selectedAccountForPayment, setSelectedAccountForPayment] = useState<LoanAccount | null>(null);
+  const [selectedProcessingFeeApp, setSelectedProcessingFeeApp] = useState<LoanApplication | null>(null);
 
   // New ticket state
   const [showNewTicketModal, setShowNewTicketModal] = useState(false);
@@ -52,16 +57,29 @@ export const CustomerDashboard: React.FC<CustomerDashboardProps> = ({
   const loadData = async () => {
     setLoading(true);
     try {
-      const [apps, loans, pays, tkts] = await Promise.all([
-        api.getApplications(user.id),
-        api.getLoanAccounts(user.id),
-        api.getPayments(),
-        api.getSupportTickets(),
-      ]);
-      setApplications(apps);
-      setLoanAccounts(loans);
-      setPayments(pays.filter((p) => p.userId === user.id));
-      setTickets(tkts.filter((t) => t.userId === user.id));
+      if (user) {
+        const [apps, loans, pays, tkts] = await Promise.all([
+          api.getApplications(user.id),
+          api.getLoanAccounts(user.id),
+          api.getPayments(),
+          api.getSupportTickets(),
+        ]);
+        setApplications(apps);
+        setLoanAccounts(loans);
+        setPayments(pays.filter((p) => p.userId === user.id));
+        setTickets(tkts.filter((t) => t.userId === user.id));
+      } else if (verifiedApplication) {
+        const [apps, loans, pays] = await Promise.all([
+          api.getApplications(),
+          api.getLoanAccounts(),
+          api.getPayments(),
+        ]);
+        const appMatches = apps.filter((a) => a.id === verifiedApplication.id || a.personalInfo?.mobile === verifiedApplication.personalInfo?.mobile);
+        const matchingLoans = loans.filter((l) => l.applicationId === verifiedApplication.id || (verifiedLoanAccount && l.accountNumber === verifiedLoanAccount.accountNumber));
+        setApplications(appMatches.length ? appMatches : [verifiedApplication]);
+        setLoanAccounts(matchingLoans.length ? matchingLoans : (verifiedLoanAccount ? [verifiedLoanAccount] : []));
+        setPayments(pays.filter((p) => p.applicationId === verifiedApplication.id));
+      }
     } catch (e) {
       console.error(e);
     } finally {
@@ -71,7 +89,7 @@ export const CustomerDashboard: React.FC<CustomerDashboardProps> = ({
 
   useEffect(() => {
     loadData();
-  }, [user.id]);
+  }, [user?.id, verifiedApplication?.id]);
 
   const primaryLoan = loanAccounts[0];
   const nextEmiInst = primaryLoan?.schedule.find((s) => s.status === 'due' || s.status === 'upcoming');
@@ -101,7 +119,9 @@ export const CustomerDashboard: React.FC<CustomerDashboardProps> = ({
       <div className="bg-slate-900 text-white rounded-3xl p-6 sm:p-8 shadow-md flex flex-col md:flex-row items-start md:items-center justify-between gap-6 relative overflow-hidden">
         <div>
           <span className="text-xs font-bold text-emerald-400 uppercase tracking-wider block mb-1">Customer Portal</span>
-          <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight">Welcome back, {user.fullName}!</h1>
+          <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight">
+            Welcome, {user?.fullName || verifiedApplication?.personalInfo?.fullName || applications[0]?.personalInfo?.fullName || 'Valued Customer'}!
+          </h1>
           <p className="text-xs sm:text-sm text-slate-300 mt-1">Manage your active loans, track applications, and make secure UPI repayments.</p>
         </div>
 
@@ -239,53 +259,132 @@ export const CustomerDashboard: React.FC<CustomerDashboardProps> = ({
           </div>
 
           <div className="grid grid-cols-1 gap-4">
-            {applications.map((app) => (
-              <div key={app.id} className="bg-white p-6 rounded-2xl border border-slate-200 shadow-xs space-y-4">
-                <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 border-b border-slate-100 pb-3">
-                  <div>
-                    <span className="text-xs font-bold text-slate-400 font-mono">{app.id}</span>
-                    <h3 className="text-lg font-bold text-slate-900">{app.productTitle}</h3>
-                  </div>
-                  <StatusBadge status={app.status} />
-                </div>
+            {applications.map((app) => {
+              const allDocsVerified = app.documents && app.documents.length > 0 && app.documents.every((d) => d.status === 'verified');
+              const isFeePending = app.status === 'processing_fee_pending';
+              const isFeeSubmitted = app.status === 'processing_fee_submitted';
+              const isFeeVerified = app.status === 'payment_verified' || app.status === 'approved' || app.status === 'active' || app.status === 'loan_disbursed';
 
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 text-xs">
-                  <div>
-                    <span className="text-slate-400 block">Requested Amount</span>
-                    <strong className="text-slate-900 text-sm">{formatINR(app.requestedAmount)}</strong>
+              return (
+                <div key={app.id} className="bg-white p-6 rounded-2xl border border-slate-200 shadow-xs space-y-5">
+                  {/* Top Bar */}
+                  <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 border-b border-slate-100 pb-3">
+                    <div>
+                      <span className="text-xs font-bold text-slate-400 font-mono">{app.id}</span>
+                      <h3 className="text-lg font-bold text-slate-900">{app.productTitle}</h3>
+                    </div>
+                    <StatusBadge status={app.status} />
                   </div>
-                  <div>
-                    <span className="text-slate-400 block">Tenure</span>
-                    <strong className="text-slate-900 text-sm">{app.requestedTenureMonths} Months</strong>
-                  </div>
-                  <div>
-                    <span className="text-slate-400 block">PAN Number</span>
-                    <strong className="text-slate-900 text-sm">{app.personalInfo.panNumber}</strong>
-                  </div>
-                  <div>
-                    <span className="text-slate-400 block">Submitted On</span>
-                    <strong className="text-slate-900 text-sm">{formatDate(app.createdAt)}</strong>
-                  </div>
-                </div>
 
-                <div className="pt-2 flex flex-wrap gap-2">
-                  <button
-                    onClick={() => generateApplicationAcknowledgement(app, settings)}
-                    className="px-3 py-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-xs font-bold text-slate-800 flex items-center gap-1.5 cursor-pointer"
-                  >
-                    <Download className="w-3.5 h-3.5" /> Acknowledgement PDF
-                  </button>
-                  {app.status === 'approved' && (
-                    <button
-                      onClick={() => generateSanctionLetter(app, settings)}
-                      className="px-3 py-1.5 rounded-lg bg-blue-700 hover:bg-blue-800 text-xs font-bold text-white flex items-center gap-1.5 cursor-pointer"
-                    >
-                      <Download className="w-3.5 h-3.5" /> Sanction Letter
-                    </button>
+                  {/* Application Timeline Progress Bar */}
+                  <div className="bg-slate-50 p-4 rounded-xl border border-slate-100">
+                    <span className="text-[11px] font-bold uppercase text-slate-500 tracking-wider block mb-3">Application Progress Timeline</span>
+                    <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 text-center text-[11px]">
+                      <div className="p-2 rounded-lg bg-emerald-100 text-emerald-900 font-bold">
+                        1. Submitted ✓
+                      </div>
+                      <div className={`p-2 rounded-lg font-bold ${allDocsVerified ? 'bg-emerald-100 text-emerald-900' : app.documents?.some(d => d.status === 'rejected') ? 'bg-rose-100 text-rose-900' : 'bg-amber-100 text-amber-900'}`}>
+                        2. Docs {allDocsVerified ? 'Verified ✓' : 'Under Review ⏳'}
+                      </div>
+                      <div className={`p-2 rounded-lg font-bold ${isFeeVerified ? 'bg-emerald-100 text-emerald-900' : isFeeSubmitted ? 'bg-blue-100 text-blue-900' : isFeePending ? 'bg-amber-100 text-amber-900 shadow-2xs animate-pulse' : 'bg-slate-200 text-slate-500'}`}>
+                        3. Fee {isFeeVerified ? 'Paid ✓' : isFeeSubmitted ? 'Submitted ⏳' : isFeePending ? 'Required ⚠️' : 'Pending'}
+                      </div>
+                      <div className={`p-2 rounded-lg font-bold ${app.status === 'approved' || app.status === 'loan_disbursed' || app.status === 'active' ? 'bg-emerald-100 text-emerald-900' : app.status === 'rejected' ? 'bg-rose-100 text-rose-900' : 'bg-slate-200 text-slate-500'}`}>
+                        4. Final Review
+                      </div>
+                      <div className={`p-2 rounded-lg font-bold ${app.status === 'approved' || app.status === 'loan_disbursed' || app.status === 'active' ? 'bg-emerald-100 text-emerald-900 font-extrabold' : app.status === 'rejected' ? 'bg-rose-100 text-rose-900' : 'bg-slate-200 text-slate-500'}`}>
+                        5. {app.status === 'approved' || app.status === 'loan_disbursed' || app.status === 'active' ? 'Loan Approved ✓' : app.status === 'rejected' ? 'Rejected' : 'Disbursement'}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Processing Fee Payment Callout (If Processing Fee Pending) */}
+                  {isFeePending && (
+                    <div className="bg-amber-50 border-2 border-amber-300 p-4 rounded-xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+                      <div>
+                        <div className="flex items-center gap-2 text-amber-900 font-bold text-sm">
+                          <AlertCircle className="w-5 h-5 text-amber-600 shrink-0" /> Documents Verified — Processing Fee Required
+                        </div>
+                        <p className="text-xs text-amber-800 mt-1">
+                          Your uploaded documents have been verified by our credit team. Please pay the loan application processing fee of <strong>{formatINR(app.processingFee || 2000)}</strong> to proceed to final underwriting.
+                        </p>
+                      </div>
+                      <button
+                        onClick={() => setSelectedProcessingFeeApp(app)}
+                        className="px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-xs uppercase tracking-wider rounded-xl shadow-md transition-all shrink-0 cursor-pointer flex items-center gap-1.5"
+                      >
+                        <CreditCard className="w-4 h-4" /> Pay Processing Fee ({formatINR(app.processingFee || 2000)})
+                      </button>
+                    </div>
                   )}
+
+                  {isFeeSubmitted && (
+                    <div className="bg-blue-50 border border-blue-200 p-3 rounded-xl text-xs text-blue-900 font-semibold flex items-center gap-2">
+                      <Clock className="w-4 h-4 text-blue-600 shrink-0" /> Processing Fee Payment Submitted. Awaiting credit desk confirmation.
+                    </div>
+                  )}
+
+                  {/* Details Grid */}
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 text-xs bg-slate-50 p-4 rounded-xl border border-slate-100">
+                    <div>
+                      <span className="text-slate-400 block">Requested Amount</span>
+                      <strong className="text-slate-900 text-sm">{formatINR(app.requestedAmount)}</strong>
+                    </div>
+                    <div>
+                      <span className="text-slate-400 block">Tenure</span>
+                      <strong className="text-slate-900 text-sm">{app.requestedTenureMonths} Months</strong>
+                    </div>
+                    <div>
+                      <span className="text-slate-400 block">PAN Number</span>
+                      <strong className="text-slate-900 text-sm">{app.personalInfo.panNumber}</strong>
+                    </div>
+                    <div>
+                      <span className="text-slate-400 block">Submitted On</span>
+                      <strong className="text-slate-900 text-sm">{formatDate(app.createdAt)}</strong>
+                    </div>
+                  </div>
+
+                  {/* Document Verification Table */}
+                  <div className="space-y-2">
+                    <span className="text-xs font-bold text-slate-700 block">Uploaded KYC & Financial Documents</span>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
+                      {app.documents?.map((doc) => (
+                        <div key={doc.id} className="p-2.5 rounded-xl border border-slate-200 bg-white flex items-center justify-between">
+                          <div>
+                            <span className="font-bold text-slate-800 block">{doc.title}</span>
+                            <span className="text-[10px] text-slate-400">{doc.fileName}</span>
+                            {doc.rejectionNote && <span className="text-[10px] text-rose-600 block mt-0.5">{doc.rejectionNote}</span>}
+                          </div>
+                          <span className={`text-[10px] font-bold uppercase px-2 py-0.5 rounded-md ${
+                            doc.status === 'verified' ? 'bg-emerald-100 text-emerald-800' : doc.status === 'rejected' ? 'bg-rose-100 text-rose-800' : 'bg-amber-100 text-amber-800'
+                          }`}>
+                            {doc.status}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Download Action Buttons */}
+                  <div className="pt-2 flex flex-wrap gap-2">
+                    <button
+                      onClick={() => generateApplicationAcknowledgement(app, settings)}
+                      className="px-3 py-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-xs font-bold text-slate-800 flex items-center gap-1.5 cursor-pointer"
+                    >
+                      <Download className="w-3.5 h-3.5" /> Acknowledgement PDF
+                    </button>
+                    {app.status === 'approved' && (
+                      <button
+                        onClick={() => generateSanctionLetter(app, settings)}
+                        className="px-3 py-1.5 rounded-lg bg-blue-700 hover:bg-blue-800 text-xs font-bold text-white flex items-center gap-1.5 cursor-pointer"
+                      >
+                        <Download className="w-3.5 h-3.5" /> Sanction Letter
+                      </button>
+                    )}
+                  </div>
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         </div>
       )}
@@ -466,13 +565,32 @@ export const CustomerDashboard: React.FC<CustomerDashboardProps> = ({
           settings={settings}
           loanAccountId={selectedAccountForPayment.accountNumber}
           applicationId={selectedAccountForPayment.applicationId}
-          userId={user.id}
-          customerName={user.fullName}
+          userId={user?.id || 'usr_guest'}
+          customerName={user?.fullName || selectedAccountForPayment.customerName}
           amountPayable={selectedAccountForPayment.monthlyEmi}
+          purpose="emi"
           installmentNumber={1}
           onClose={() => setSelectedAccountForPayment(null)}
           onPaymentSubmitted={() => {
             setSelectedAccountForPayment(null);
+            loadData();
+          }}
+        />
+      )}
+
+      {/* Processing Fee Payment Modal */}
+      {selectedProcessingFeeApp && (
+        <UpiPaymentModal
+          settings={settings}
+          loanAccountId=""
+          applicationId={selectedProcessingFeeApp.id}
+          userId={user?.id || selectedProcessingFeeApp.userId}
+          customerName={user?.fullName || selectedProcessingFeeApp.personalInfo.fullName}
+          amountPayable={selectedProcessingFeeApp.processingFee || 2000}
+          purpose="processing_fee"
+          onClose={() => setSelectedProcessingFeeApp(null)}
+          onPaymentSubmitted={() => {
+            setSelectedProcessingFeeApp(null);
             loadData();
           }}
         />

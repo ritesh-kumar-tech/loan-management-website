@@ -22,7 +22,7 @@ import { ApplicationStatus, EligibilityResult, LoanApplication, Receipt, Support
 
 async function startServer() {
   const app = express();
-  const PORT = 3000;
+  const PORT = Number(process.env.PORT) || 3000;
 
   app.use(express.json({ limit: '10mb' }));
 
@@ -230,82 +230,69 @@ async function startServer() {
     res.status(403).json({ success: false, error: 'Use secure tracking verification or authenticated application lists.' });
   });
 
+  const normPhone = (str: string) => String(str || '').replace(/\D/g, '').slice(-10);
+
   app.post('/api/applications/track', (req, res) => {
-    const { identifier, applicationId, contact, otp } = req.body;
-    const lookupValue = String(identifier || applicationId || contact || '').trim().toLowerCase();
-    const normalizedContact = String(contact || '').trim().toLowerCase();
+    const { identifier, applicationId, contact, otp, stage } = req.body;
+    const rawSearch = String(identifier || applicationId || contact || '').trim();
+    const lookupValue = rawSearch.toLowerCase();
+    const searchPhone = normPhone(rawSearch);
+
     const appItem = applications
-      .filter((a) =>
-        a.id.toLowerCase() === lookupValue ||
-        a.personalInfo?.mobile === lookupValue ||
-        a.personalInfo?.email?.toLowerCase() === lookupValue
-      )
+      .filter((a) => {
+        const aId = a.id.toLowerCase();
+        const aPhone = normPhone(a.personalInfo?.mobile);
+        const aEmail = a.personalInfo?.email?.toLowerCase();
+        return (
+          aId === lookupValue ||
+          (searchPhone.length === 10 && aPhone === searchPhone) ||
+          (aEmail && aEmail === lookupValue)
+        );
+      })
       .sort((a, b) => new Date(b.updatedAt || b.createdAt).getTime() - new Date(a.updatedAt || a.createdAt).getTime())[0];
 
     if (!appItem) {
-      res.status(404).json({ success: false, error: 'Application not found.' });
+      res.status(404).json({ success: false, error: 'Application not found. Please check your Application ID or registered mobile number.' });
       return;
     }
 
-    const contactMatches =
-      !normalizedContact ||
-      appItem.personalInfo?.mobile === normalizedContact ||
-      appItem.personalInfo?.email?.toLowerCase() === normalizedContact;
-
-    if (!contactMatches || String(otp || '').trim() !== '123456') {
-      addAuditLog('public', 'guest', normalizedContact || 'unknown', 'TRACKING_VERIFICATION_FAILED', 'LoanApplication', appItem.id, 'Public tracking verification failed');
-      res.status(403).json({ success: false, error: 'Verification failed. Check the registered mobile/email and OTP.' });
+    // Stage 1: Verify existence of application before requesting OTP
+    if (stage === 1 || (!otp && stage !== 2)) {
+      const maskedMobile = appItem.personalInfo?.mobile
+        ? appItem.personalInfo.mobile.replace(/^(\d{2})\d+(\d{2})$/, '$1******$2')
+        : '******';
+      res.json({
+        success: true,
+        stage: 1,
+        requiresOtp: true,
+        applicationId: appItem.id,
+        maskedMobile,
+        applicantName: appItem.personalInfo?.fullName,
+        message: `Application found. Enter OTP 123456 sent to registered mobile ${maskedMobile}.`,
+      });
       return;
     }
 
-    const maskedName = appItem.personalInfo.fullName.replace(/\b(\w)(\w+)/g, (_match, first, rest) => `${first}${'*'.repeat(Math.min(String(rest).length, 6))}`);
-    const safeApplication = {
-      id: appItem.id,
-      productTitle: appItem.productTitle,
-      productType: appItem.productType,
-      requestedAmount: appItem.requestedAmount,
-      requestedTenureMonths: appItem.requestedTenureMonths,
-      status: appItem.status,
-      statusHistory: appItem.statusHistory.map((item) => ({
-        status: item.status,
-        date: item.date,
-        note: item.note,
-        updatedBy: item.updatedBy,
-      })),
-      createdAt: appItem.createdAt,
-      updatedAt: appItem.updatedAt,
-      personalInfo: {
-        fullName: maskedName,
-        fatherOrSpouseName: 'Hidden for privacy',
-        dob: 'Hidden for privacy',
-        gender: appItem.personalInfo.gender,
-        maritalStatus: appItem.personalInfo.maritalStatus,
-        nationality: 'Hidden for privacy',
-        email: appItem.personalInfo.email.replace(/(^.).*(@.*$)/, '$1***$2'),
-        mobile: appItem.personalInfo.mobile.replace(/^(\d{2})\d+(\d{2})$/, '$1******$2'),
-        panNumber: '*****',
-        aadhaarLast4: '****',
-        currentAddress: 'Hidden for privacy',
-        permanentAddress: 'Hidden for privacy',
-        city: 'Hidden for privacy',
-        state: 'Hidden for privacy',
-        pincode: 'Hidden',
-        residenceType: appItem.personalInfo.residenceType,
-      },
-      documents: appItem.documents.map((doc) => ({
-        id: doc.id,
-        docType: doc.docType,
-        title: doc.title,
-        fileName: doc.fileName,
-        uploadedAt: doc.uploadedAt,
-        status: doc.status,
-        rejectionNote: doc.rejectionNote,
-        fileUrl: '',
-      })),
-    };
+    // Stage 2: Verify OTP
+    if (String(otp || '').trim() !== '123456') {
+      addAuditLog('public', 'guest', rawSearch, 'TRACKING_VERIFICATION_FAILED', 'LoanApplication', appItem.id, 'OTP verification failed');
+      res.status(403).json({ success: false, error: 'Verification failed. Please enter the valid OTP 123456.' });
+      return;
+    }
 
-    addAuditLog('public', 'guest', normalizedContact, 'TRACKING_VERIFIED', 'LoanApplication', appItem.id, 'Public tracking verification succeeded');
-    res.json({ success: true, application: safeApplication });
+    const matchingLoan = loanAccounts.find(
+      (l) => l.applicationId === appItem.id || (l.userId && l.userId === appItem.userId)
+    ) || null;
+
+    addAuditLog('public', 'guest', rawSearch, 'TRACKING_VERIFIED', 'LoanApplication', appItem.id, 'Customer portal access verified via OTP');
+
+    res.json({
+      success: true,
+      stage: 2,
+      application: appItem,
+      loanAccount: matchingLoan,
+      sessionToken: `cust_token_${appItem.id}_${Date.now()}`,
+    });
   });
 
   app.post('/api/applications', (req, res) => {
@@ -362,51 +349,97 @@ async function startServer() {
     if (processingFee) appItem.processingFee = Number(processingFee);
     if (rejectionReason) appItem.rejectionReason = rejectionReason;
 
-    if (status === 'approved') {
-      appItem.approvalDate = new Date().toISOString();
-      const calc = calculateEmi(appItem.approvedAmount!, appItem.approvedRate!, appItem.approvedTenureMonths!, 1.5);
+    if (status === 'approved' || status === 'loan_disbursed' || status === 'active') {
+      appItem.approvalDate = appItem.approvalDate || new Date().toISOString();
+      const appAmt = appItem.approvedAmount || appItem.requestedAmount || 300000;
+      const appRate = appItem.approvedRate || 12.5;
+      const appTenure = appItem.approvedTenureMonths || appItem.requestedTenureMonths || 24;
+
+      const calc = calculateEmi(appAmt, appRate, appTenure, 1.5);
+      appItem.approvedAmount = appAmt;
+      appItem.approvedRate = appRate;
+      appItem.approvedTenureMonths = appTenure;
       appItem.approvedEmi = calc.monthlyEmi;
 
-      // Auto create loan account
-      const accountNo = `LA-2026-${Math.floor(100000 + Math.random() * 900000)}`;
-      const newLoanAccount = {
-        accountNumber: accountNo,
-        applicationId: appItem.id,
-        userId: appItem.userId,
-        customerName: appItem.personalInfo.fullName,
-        loanType: appItem.productType,
-        principalAmount: appItem.approvedAmount!,
-        interestRate: appItem.approvedRate!,
-        tenureMonths: appItem.approvedTenureMonths!,
-        monthlyEmi: calc.monthlyEmi,
-        startDate: new Date().toISOString(),
-        maturityDate: new Date(Date.now() + appItem.approvedTenureMonths! * 30 * 24 * 3600 * 1000).toISOString(),
-        processingFee: appItem.processingFee || 0,
-        outstandingPrincipal: appItem.approvedAmount!,
-        totalPaid: 0,
-        totalOverdue: 0,
-        status: 'active' as const,
-        schedule: calc.schedule.map((row, i) => ({
-          installmentNumber: row.month,
-          dueDate: new Date(Date.now() + (i + 1) * 30 * 24 * 3600 * 1000).toISOString(),
-          openingPrincipal: row.openingPrincipal,
-          emiAmount: row.emi,
-          principalComponent: row.principalPayment,
-          interestComponent: row.interestPayment,
-          charges: 0,
-          closingPrincipal: row.closingPrincipal,
-          status: i === 0 ? ('due' as const) : ('upcoming' as const),
-          paidAmount: 0,
-        })),
-        createdAt: new Date().toISOString(),
-      };
-      loanAccounts.unshift(newLoanAccount);
+      // Check if loan account already exists
+      const existingAccount = loanAccounts.find((l) => l.applicationId === appItem.id);
+      if (!existingAccount) {
+        const accountNo = `LA-2026-${Math.floor(100000 + Math.random() * 900000)}`;
+        const newLoanAccount = {
+          accountNumber: accountNo,
+          applicationId: appItem.id,
+          userId: appItem.userId,
+          customerName: appItem.personalInfo.fullName,
+          loanType: appItem.productType,
+          principalAmount: appAmt,
+          interestRate: appRate,
+          tenureMonths: appTenure,
+          monthlyEmi: calc.monthlyEmi,
+          startDate: new Date().toISOString(),
+          maturityDate: new Date(Date.now() + appTenure * 30 * 24 * 3600 * 1000).toISOString(),
+          processingFee: appItem.processingFee || 2000,
+          outstandingPrincipal: appAmt,
+          totalPaid: 0,
+          totalOverdue: 0,
+          status: 'active' as const,
+          schedule: calc.schedule.map((row, i) => ({
+            installmentNumber: row.month,
+            dueDate: new Date(Date.now() + (i + 1) * 30 * 24 * 3600 * 1000).toISOString(),
+            openingPrincipal: row.openingPrincipal,
+            emiAmount: row.emi,
+            principalComponent: row.principalPayment,
+            interestComponent: row.interestPayment,
+            charges: 0,
+            closingPrincipal: row.closingPrincipal,
+            status: i === 0 ? ('due' as const) : ('upcoming' as const),
+            paidAmount: 0,
+          })),
+          createdAt: new Date().toISOString(),
+        };
+        loanAccounts.unshift(newLoanAccount);
+      }
     }
 
     appItem.updatedAt = new Date().toISOString();
     applications[idx] = appItem;
 
     addAuditLog('usr_admin_1', 'admin', 'admin@dhanifinance.in', 'APPLICATION_STATUS_UPDATED', 'LoanApplication', appItem.id, `Updated status to ${status}`);
+    res.json({ success: true, application: appItem });
+  });
+
+  // Admin Request Processing Fee (Only allowed if all docs are verified)
+  app.post('/api/applications/:id/request-processing-fee', (req, res) => {
+    const { id } = req.params;
+    const { feeAmount } = req.body;
+    const appItem = applications.find((a) => a.id === id);
+
+    if (!appItem) {
+      res.status(404).json({ success: false, error: 'Application not found' });
+      return;
+    }
+
+    // Check if mandatory documents are verified
+    const unverifiedDocs = appItem.documents.filter((d) => d.status !== 'verified');
+    if (unverifiedDocs.length > 0) {
+      res.status(400).json({
+        success: false,
+        error: `Cannot request processing fee until all mandatory documents are verified. (${unverifiedDocs.length} document(s) pending/rejected).`,
+      });
+      return;
+    }
+
+    const fee = Number(feeAmount) || appItem.processingFee || 2000;
+    appItem.processingFee = fee;
+    appItem.status = 'processing_fee_pending';
+    appItem.statusHistory.push({
+      status: 'processing_fee_pending',
+      date: new Date().toISOString(),
+      note: `Processing fee requested by Admin: ₹${fee.toLocaleString('en-IN')}`,
+      updatedBy: 'Admin',
+    });
+    appItem.updatedAt = new Date().toISOString();
+
+    addAuditLog('usr_admin_1', 'admin', 'admin@dhanifinance.in', 'PROCESSING_FEE_REQUESTED', 'LoanApplication', appItem.id, `Requested processing fee ₹${fee}`);
     res.json({ success: true, application: appItem });
   });
 
@@ -422,7 +455,7 @@ async function startServer() {
 
   // Payments: Submit Proof
   app.post('/api/payments/submit', (req, res) => {
-    const { loanAccountId, applicationId, userId, customerName, amount, utrNumber, proofScreenshotUrl, installmentNumber } = req.body;
+    const { loanAccountId, applicationId, userId, customerName, amount, purpose, utrNumber, proofScreenshotUrl, installmentNumber } = req.body;
 
     // Check duplicate UTR
     const duplicate = paymentSubmissions.find((p) => p.utrNumber.trim().toLowerCase() === utrNumber.trim().toLowerCase());
@@ -431,14 +464,15 @@ async function startServer() {
       return;
     }
 
+    const paymentPurpose = purpose || 'emi';
     const newPayment: any = {
       id: `PAY-2026-${Math.floor(1000 + Math.random() * 9000)}`,
-      loanAccountId,
-      applicationId,
-      userId,
-      customerName,
+      loanAccountId: loanAccountId || '',
+      applicationId: applicationId || '',
+      userId: userId || 'usr_guest',
+      customerName: customerName || 'Customer',
       amount: Number(amount),
-      purpose: 'emi',
+      purpose: paymentPurpose,
       installmentNumber: installmentNumber ? Number(installmentNumber) : 1,
       upiIdUsed: settings.upiId,
       utrNumber,
@@ -449,7 +483,23 @@ async function startServer() {
     };
 
     paymentSubmissions.unshift(newPayment);
-    addAuditLog(userId, 'customer', customerName, 'PAYMENT_SUBMITTED', 'PaymentSubmission', newPayment.id, `Submitted UTR ${utrNumber} for ₹${amount}`);
+
+    // If processing fee submission, update application status
+    if (paymentPurpose === 'processing_fee' && applicationId) {
+      const appItem = applications.find((a) => a.id === applicationId);
+      if (appItem) {
+        appItem.status = 'processing_fee_submitted';
+        appItem.statusHistory.push({
+          status: 'processing_fee_submitted',
+          date: new Date().toISOString(),
+          note: `Processing fee payment submitted with UTR ${utrNumber}`,
+          updatedBy: 'Customer',
+        });
+        appItem.updatedAt = new Date().toISOString();
+      }
+    }
+
+    addAuditLog(userId || 'usr_guest', 'customer', customerName || 'Customer', 'PAYMENT_SUBMITTED', 'PaymentSubmission', newPayment.id, `Submitted UTR ${utrNumber} for ₹${amount} (${paymentPurpose})`);
     res.json({ success: true, payment: newPayment });
   });
 
@@ -477,6 +527,21 @@ async function startServer() {
 
       const receiptNo = `RCT-2026-${Math.floor(100000 + Math.random() * 900000)}`;
       pay.receiptNumber = receiptNo;
+
+      // If processing fee payment, update application status
+      if (pay.purpose === 'processing_fee' && pay.applicationId) {
+        const appItem = applications.find((a) => a.id === pay.applicationId);
+        if (appItem) {
+          appItem.status = 'payment_verified';
+          appItem.statusHistory.push({
+            status: 'payment_verified',
+            date: new Date().toISOString(),
+            note: `Processing fee payment verified by Admin: ₹${pay.amount.toLocaleString('en-IN')}`,
+            updatedBy: 'Admin',
+          });
+          appItem.updatedAt = new Date().toISOString();
+        }
+      }
 
       // Update Loan Account schedule
       const loan = loanAccounts.find((l) => l.accountNumber === pay.loanAccountId || l.applicationId === pay.applicationId);

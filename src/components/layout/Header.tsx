@@ -272,9 +272,9 @@ export const Header: React.FC<HeaderProps> = ({
             <div className="flex items-center gap-2">
               <button
                 onClick={onOpenLogin}
-                className="min-h-11 px-4 rounded-xl text-blue-800 border border-blue-100 hover:bg-blue-50 text-sm font-bold transition-colors cursor-pointer flex items-center gap-1 whitespace-nowrap"
+                className="min-h-11 px-4 rounded-xl text-blue-800 border border-blue-100 hover:bg-blue-50 text-sm font-bold transition-colors cursor-pointer flex items-center gap-1.5 whitespace-nowrap"
               >
-                <UserIcon className="w-3.5 h-3.5 text-slate-500" /> Login
+                <ShieldCheck className="w-4 h-4 text-blue-700" /> Admin Sign In
               </button>
               <button
                 onClick={() => onStartApplication()}
