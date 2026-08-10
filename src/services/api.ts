@@ -32,6 +32,10 @@ export const api = {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ email, password, role }),
     });
+    const contentType = res.headers.get('content-type') || '';
+    if (!contentType.includes('application/json')) {
+      throw new Error('API route is not deployed correctly on Vercel. Please redeploy the project root, not only the dist folder.');
+    }
     const data = await res.json();
     if (!res.ok || !data.user) throw new Error(data.error || 'Login failed');
     return data;
