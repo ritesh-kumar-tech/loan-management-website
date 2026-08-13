@@ -1,0 +1,2 @@
+-- Test data is inserted by src/db/seed.ts so password hashes, EMI schedules,
+-- and JSON payloads stay generated from the TypeScript domain model.

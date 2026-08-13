@@ -1,24 +1,27 @@
 import express from 'express';
 import path from 'path';
 import { createServer as createViteServer } from 'vite';
-import {
-  defaultSettings,
-  defaultUsers,
-  defaultLoanProducts,
-  defaultApplications,
-  defaultLoanAccounts,
-  defaultPaymentSubmissions,
-  defaultReceipts,
-  defaultSupportTickets,
-  defaultNotifications,
-  defaultAuditLogs,
-  defaultCustomers,
-  defaultStaff,
-  defaultCmsContent,
-  defaultEligibilityRules,
-} from './src/data/mockDatabase';
 import { calculateEmi, calculateFOIR } from './src/utils/calculator';
 import { ApplicationStatus, EligibilityResult, LoanApplication, Receipt, SupportTicket } from './src/types';
+import {
+  findUserAuthByEmail,
+  getCollections,
+  initializeDatabase,
+  saveApplication,
+  saveAuditLog,
+  saveCmsContent,
+  saveCustomer,
+  saveEligibilityRule,
+  saveLoanAccount,
+  saveLoanProduct,
+  savePaymentSubmission,
+  saveReceipt,
+  saveSettings,
+  saveStaffMember,
+  saveSupportTicket,
+  saveUser,
+} from './src/db/appStore';
+import { hashPassword, maskApplicationForPublic, verifyPassword } from './src/db/security';
 
 interface CreateAppOptions {
   serveClient?: boolean;
@@ -29,25 +32,26 @@ export async function createApp({ serveClient = true }: CreateAppOptions = {}) {
 
   app.use(express.json({ limit: '10mb' }));
 
-  // In-memory Database state initialized with mock seeds
-  let settings = { ...defaultSettings };
-  let users = [...defaultUsers];
-  let loanProducts = [...defaultLoanProducts];
-  let applications = [...defaultApplications];
-  let loanAccounts = [...defaultLoanAccounts];
-  let paymentSubmissions = [...defaultPaymentSubmissions];
-  let receipts = [...defaultReceipts];
-  let supportTickets = [...defaultSupportTickets];
-  let notifications = [...defaultNotifications];
-  let auditLogs = [...defaultAuditLogs];
-  let customers = [...defaultCustomers];
-  let staffMembers = [...defaultStaff];
-  let cmsContent = { ...defaultCmsContent };
-  let eligibilityRules = [...defaultEligibilityRules];
+  await initializeDatabase();
+  const collections = await getCollections();
+  let settings = collections.settings;
+  let users = collections.users;
+  let loanProducts = collections.loanProducts;
+  let applications = collections.applications;
+  let loanAccounts = collections.loanAccounts;
+  let paymentSubmissions = collections.paymentSubmissions;
+  let receipts = collections.receipts;
+  let supportTickets = collections.supportTickets;
+  let notifications = collections.notifications;
+  let auditLogs = collections.auditLogs;
+  let customers = collections.customers;
+  let staffMembers = collections.staffMembers;
+  let cmsContent = collections.cmsContent;
+  let eligibilityRules = collections.eligibilityRules;
 
   // Helper log audit
   const addAuditLog = (userId: string, role: string, email: string, action: string, entityType: string, entityId: string, details: string) => {
-    auditLogs.unshift({
+    const log = {
       id: `log_${Date.now()}`,
       timestamp: new Date().toISOString(),
       userId,
@@ -58,7 +62,9 @@ export async function createApp({ serveClient = true }: CreateAppOptions = {}) {
       entityId,
       details,
       ipAddress: '127.0.0.1',
-    });
+    };
+    auditLogs.unshift(log);
+    void saveAuditLog(log);
   };
 
   // ---------------- API ROUTES ----------------
@@ -75,26 +81,30 @@ export async function createApp({ serveClient = true }: CreateAppOptions = {}) {
 
   app.post('/api/settings', (req, res) => {
     settings = { ...settings, ...req.body };
+    saveSettings(settings);
     addAuditLog('usr_admin_1', 'admin', 'admin@dhanifinance.in', 'SETTINGS_UPDATED', 'CompanySettings', 'global', 'Updated company branding settings');
     res.json({ success: true, settings });
   });
 
   // Auth: Login
-  app.post('/api/auth/login', (req, res) => {
+  app.post('/api/auth/login', async (req, res) => {
     const { email, password, role } = req.body;
     if (!email || !password) {
       res.status(400).json({ success: false, error: 'Email and password are required.' });
       return;
     }
 
-    const user = users.find((u) => u.email.toLowerCase() === String(email).toLowerCase());
+    const authRecord = await findUserAuthByEmail(String(email));
+    const user = authRecord
+      ? (typeof authRecord.data_json === 'string' ? JSON.parse(authRecord.data_json) : authRecord.data_json)
+      : users.find((u) => u.email.toLowerCase() === String(email).toLowerCase());
     
     if (!user) {
       res.status(401).json({ success: false, error: 'Invalid email or password.' });
       return;
     }
 
-    if (password !== 'password123') {
+    if (!authRecord || !verifyPassword(String(password), authRecord.password_hash)) {
       addAuditLog(user.id, user.role, user.email, 'USER_LOGIN_FAILED', 'User', user.id, 'Invalid password attempt');
       res.status(401).json({ success: false, error: 'Invalid email or password.' });
       return;
@@ -124,6 +134,7 @@ export async function createApp({ serveClient = true }: CreateAppOptions = {}) {
       createdAt: new Date().toISOString(),
     };
     users.push(newUser);
+    saveUser(newUser, hashPassword(String(req.body.password || 'password123')));
     addAuditLog(newUser.id, 'customer', newUser.email, 'USER_REGISTERED', 'User', newUser.id, 'New customer registration');
     res.json({ success: true, user: newUser, token: `jwt_token_${newUser.id}` });
   });
@@ -141,6 +152,7 @@ export async function createApp({ serveClient = true }: CreateAppOptions = {}) {
     } else {
       loanProducts.push(product);
     }
+    saveLoanProduct(product);
     addAuditLog('usr_admin_1', 'admin', 'admin@dhanifinance.in', 'PRODUCT_SAVED', 'LoanProduct', product.id, `Saved product ${product.title}`);
     res.json({ success: true, products: loanProducts });
   });
@@ -292,7 +304,7 @@ export async function createApp({ serveClient = true }: CreateAppOptions = {}) {
     res.json({
       success: true,
       stage: 2,
-      application: appItem,
+      application: maskApplicationForPublic(appItem),
       loanAccount: matchingLoan,
       sessionToken: `cust_token_${appItem.id}_${Date.now()}`,
     });
@@ -322,6 +334,7 @@ export async function createApp({ serveClient = true }: CreateAppOptions = {}) {
       applications.unshift(appItem);
     }
 
+    saveApplication(appItem);
     addAuditLog(appItem.userId || 'usr_guest', 'customer', appItem.personalInfo?.email || 'user', 'APPLICATION_SAVED', 'LoanApplication', appItem.id, `Saved loan application ${appItem.id}`);
     res.json({ success: true, application: appItem });
   });
@@ -400,11 +413,13 @@ export async function createApp({ serveClient = true }: CreateAppOptions = {}) {
           createdAt: new Date().toISOString(),
         };
         loanAccounts.unshift(newLoanAccount);
+        saveLoanAccount(newLoanAccount);
       }
     }
 
     appItem.updatedAt = new Date().toISOString();
     applications[idx] = appItem;
+    saveApplication(appItem);
 
     addAuditLog('usr_admin_1', 'admin', 'admin@dhanifinance.in', 'APPLICATION_STATUS_UPDATED', 'LoanApplication', appItem.id, `Updated status to ${status}`);
     res.json({ success: true, application: appItem });
@@ -441,6 +456,7 @@ export async function createApp({ serveClient = true }: CreateAppOptions = {}) {
       updatedBy: 'Admin',
     });
     appItem.updatedAt = new Date().toISOString();
+    saveApplication(appItem);
 
     addAuditLog('usr_admin_1', 'admin', 'admin@dhanifinance.in', 'PROCESSING_FEE_REQUESTED', 'LoanApplication', appItem.id, `Requested processing fee ₹${fee}`);
     res.json({ success: true, application: appItem });
@@ -486,6 +502,7 @@ export async function createApp({ serveClient = true }: CreateAppOptions = {}) {
     };
 
     paymentSubmissions.unshift(newPayment);
+    savePaymentSubmission(newPayment);
 
     // If processing fee submission, update application status
     if (paymentPurpose === 'processing_fee' && applicationId) {
@@ -499,6 +516,7 @@ export async function createApp({ serveClient = true }: CreateAppOptions = {}) {
           updatedBy: 'Customer',
         });
         appItem.updatedAt = new Date().toISOString();
+        saveApplication(appItem);
       }
     }
 
@@ -543,6 +561,7 @@ export async function createApp({ serveClient = true }: CreateAppOptions = {}) {
             updatedBy: 'Admin',
           });
           appItem.updatedAt = new Date().toISOString();
+          saveApplication(appItem);
         }
       }
 
@@ -568,6 +587,7 @@ export async function createApp({ serveClient = true }: CreateAppOptions = {}) {
             nextDue = loan.schedule[instIdx + 1].dueDate;
           }
         }
+        saveLoanAccount(loan);
       }
 
       const newReceipt: Receipt = {
@@ -586,6 +606,7 @@ export async function createApp({ serveClient = true }: CreateAppOptions = {}) {
         qrVerificationCode: `${req.headers.origin || 'http://localhost:3000'}/verify-receipt?id=${receiptNo}`,
       };
       receipts.unshift(newReceipt);
+      saveReceipt(newReceipt);
 
       addAuditLog('usr_admin_1', 'admin', 'admin@dhanifinance.in', 'PAYMENT_VERIFIED', 'PaymentSubmission', pay.id, `Approved payment UTR ${pay.utrNumber}`);
     } else {
@@ -595,6 +616,7 @@ export async function createApp({ serveClient = true }: CreateAppOptions = {}) {
     }
 
     paymentSubmissions[payIdx] = pay;
+    savePaymentSubmission(pay);
     res.json({ success: true, payment: pay });
   });
 
@@ -621,6 +643,7 @@ export async function createApp({ serveClient = true }: CreateAppOptions = {}) {
       if (idx >= 0) {
         supportTickets[idx].messages.push({ sender, text, date: new Date().toISOString() });
         supportTickets[idx].updatedAt = new Date().toISOString();
+        saveSupportTicket(supportTickets[idx]);
         res.json({ success: true, ticket: supportTickets[idx] });
         return;
       }
@@ -641,6 +664,7 @@ export async function createApp({ serveClient = true }: CreateAppOptions = {}) {
     };
 
     supportTickets.unshift(newTicket);
+    saveSupportTicket(newTicket);
     res.json({ success: true, ticket: newTicket });
   });
 
@@ -743,12 +767,15 @@ export async function createApp({ serveClient = true }: CreateAppOptions = {}) {
     const idx = customers.findIndex((c) => c.id === cust.id);
     if (idx >= 0) {
       customers[idx] = { ...customers[idx], ...cust };
+      saveCustomer(customers[idx]);
     } else {
-      customers.unshift({
+      const newCustomer = {
         ...cust,
         id: cust.id || `usr_cust_${Date.now()}`,
         createdAt: new Date().toISOString(),
-      });
+      };
+      customers.unshift(newCustomer);
+      saveCustomer(newCustomer);
     }
     addAuditLog('usr_admin_1', 'admin', 'admin@dhanifinance.in', 'CUSTOMER_UPDATED', 'Customer', cust.id || 'new', `Updated customer ${cust.fullName || cust.email}`);
     res.json({ success: true, customers });
@@ -763,6 +790,8 @@ export async function createApp({ serveClient = true }: CreateAppOptions = {}) {
       if (doc) {
         doc.status = status;
         if (rejectionNote) doc.rejectionNote = rejectionNote;
+        appItem.updatedAt = new Date().toISOString();
+        saveApplication(appItem);
         addAuditLog('usr_admin_1', 'admin', 'admin@dhanifinance.in', 'DOCUMENT_VERIFIED', 'ApplicationDocument', documentId, `Document ${doc.title} marked ${status}`);
       }
     }
@@ -776,6 +805,7 @@ export async function createApp({ serveClient = true }: CreateAppOptions = {}) {
 
   app.post('/api/cms', (req, res) => {
     cmsContent = { ...cmsContent, ...req.body };
+    saveCmsContent(cmsContent);
     addAuditLog('usr_admin_1', 'admin', 'admin@dhanifinance.in', 'CMS_UPDATED', 'CmsContent', 'global', 'Updated website CMS content');
     res.json({ success: true, cms: cmsContent });
   });
@@ -790,12 +820,15 @@ export async function createApp({ serveClient = true }: CreateAppOptions = {}) {
     const idx = staffMembers.findIndex((s) => s.id === member.id);
     if (idx >= 0) {
       staffMembers[idx] = { ...staffMembers[idx], ...member };
+      saveStaffMember(staffMembers[idx]);
     } else {
-      staffMembers.unshift({
+      const newStaffMember = {
         ...member,
         id: `stf_${Date.now()}`,
         lastLogin: new Date().toISOString(),
-      });
+      };
+      staffMembers.unshift(newStaffMember);
+      saveStaffMember(newStaffMember);
     }
     addAuditLog('usr_admin_1', 'admin', 'admin@dhanifinance.in', 'STAFF_SAVED', 'StaffMember', member.id || 'new', `Saved staff member ${member.fullName}`);
     res.json({ success: true, staff: staffMembers });
@@ -811,8 +844,11 @@ export async function createApp({ serveClient = true }: CreateAppOptions = {}) {
     const idx = eligibilityRules.findIndex((r) => r.id === rule.id);
     if (idx >= 0) {
       eligibilityRules[idx] = rule;
+      saveEligibilityRule(eligibilityRules[idx]);
     } else {
-      eligibilityRules.unshift({ ...rule, id: `rule_${Date.now()}` });
+      const newRule = { ...rule, id: `rule_${Date.now()}` };
+      eligibilityRules.unshift(newRule);
+      saveEligibilityRule(newRule);
     }
     addAuditLog('usr_admin_1', 'admin', 'admin@dhanifinance.in', 'RULE_SAVED', 'EligibilityRule', rule.id || 'new', `Saved eligibility rule ${rule.ruleName}`);
     res.json({ success: true, rules: eligibilityRules });
@@ -846,6 +882,7 @@ export async function createApp({ serveClient = true }: CreateAppOptions = {}) {
       if (inst) inst.charges = 0;
     }
 
+    saveLoanAccount(loan);
     addAuditLog('usr_admin_1', 'admin', 'admin@dhanifinance.in', 'LOAN_ADJUSTED', 'LoanAccount', accountNumber, `Loan adjustment: ${type} of ₹${amount || 0} (${reason})`);
     res.json({ success: true, loanAccount: loan });
   });
