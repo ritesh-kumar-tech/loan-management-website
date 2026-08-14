@@ -192,62 +192,123 @@ export function generateSanctionLetter(app: LoanApplication, settings: CompanySe
   drawHeader(doc, settings, 'Loan Sanction Letter');
 
   let y = 45;
+  const sanctionDate = formatDate(app.approvalDate || new Date().toISOString());
+  const sanctionedAmount = app.approvedAmount || app.requestedAmount;
+  const approvedRate = app.approvedRate || 12.5;
+  const approvedTenure = app.approvedTenureMonths || app.requestedTenureMonths;
+  const approvedEmi = app.approvedEmi || 0;
+
+  doc.setFillColor(239, 246, 255);
+  doc.roundedRect(14, y - 4, 182, 18, 2, 2, 'F');
+  doc.setDrawColor(191, 219, 254);
+  doc.roundedRect(14, y - 4, 182, 18, 2, 2, 'S');
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(13);
   doc.setTextColor(15, 23, 42);
-  doc.text('OFFICIAL LOAN SANCTION ADVICE', 14, y);
+  doc.text('OFFICIAL LOAN SANCTION LETTER', 18, y + 3);
+  doc.setFontSize(8);
+  doc.setTextColor(37, 99, 235);
+  doc.text('Subject to final verification, agreement execution and lender policy checks', 18, y + 9);
 
-  y += 8;
+  y += 22;
   doc.setFontSize(9);
   doc.setFont('helvetica', 'normal');
-  doc.text(`Ref No: SANC/${app.id}/2026`, 14, y);
-  doc.text(`Date: ${formatDate(app.approvalDate || new Date().toISOString())}`, 196, y, { align: 'right' });
+  doc.setTextColor(51, 65, 85);
+  doc.text(`Sanction Reference No: SANC/${app.id}/2026`, 14, y);
+  doc.text(`Date of Issue: ${sanctionDate}`, 196, y, { align: 'right' });
 
   y += 10;
-  doc.text(`To,`, 14, y); y += 5;
   doc.setFont('helvetica', 'bold');
-  doc.text(app.personalInfo.fullName.toUpperCase(), 14, y); y += 5;
+  doc.text('Borrower Details', 14, y);
+  y += 4;
+  doc.setFillColor(248, 250, 252);
+  doc.rect(14, y, 182, 26, 'F');
+  doc.setDrawColor(226, 232, 240);
+  doc.rect(14, y, 182, 26, 'S');
+
+  doc.setFont('helvetica', 'bold');
+  doc.text(app.personalInfo.fullName.toUpperCase(), 18, y + 7);
   doc.setFont('helvetica', 'normal');
-  doc.text(`${app.personalInfo.currentAddress}, ${app.personalInfo.city}, ${app.personalInfo.state} - ${app.personalInfo.pincode}`, 14, y, { maxWidth: 180 });
-  doc.text(`PAN: ${app.personalInfo.panNumber} | Mobile: ${app.personalInfo.mobile}`, 14, y + 5);
+  doc.text(`${app.personalInfo.currentAddress}, ${app.personalInfo.city}, ${app.personalInfo.state} - ${app.personalInfo.pincode}`, 18, y + 13, { maxWidth: 112 });
+  doc.text(`PAN: ${app.personalInfo.panNumber}`, 140, y + 7);
+  doc.text(`Mobile: ${app.personalInfo.mobile}`, 140, y + 13);
+  doc.text(`Application ID: ${app.id}`, 140, y + 19);
 
-  y += 15;
-  doc.text(`Dear Sir/Madam,`, 14, y); y += 5;
-  doc.text(`We are pleased to inform you that your application for a ${app.productTitle} has been in-principle APPROVED by Dhani Finance credit desk as per the sanction terms detailed below:`, 14, y, { maxWidth: 180 });
+  y += 36;
+  doc.text('Dear Sir/Madam,', 14, y);
+  y += 6;
+  const intro = `We are pleased to inform you that your application for ${app.productTitle} has been approved in principle by ${settings.companyName}. The sanction is issued on the basis of details submitted by you and remains subject to completion of documentation, verification and final disbursement checks.`;
+  doc.text(doc.splitTextToSize(intro, 182), 14, y);
 
-  y += 12;
+  y += 18;
   // Sanction Terms Table
   const terms = [
     ['Loan Product Category', app.productTitle],
-    ['Sanctioned Amount', formatINR(app.approvedAmount || app.requestedAmount)],
-    ['Rate of Interest', `${app.approvedRate || 12.5}% p.a. (Reducing Balance)`],
-    ['Loan Tenure', `${app.approvedTenureMonths || app.requestedTenureMonths} Months`],
-    ['Monthly Equated Installment (EMI)', formatINR(app.approvedEmi || 0)],
+    ['Sanctioned Amount', formatINR(sanctionedAmount)],
+    ['Rate of Interest', `${approvedRate}% p.a. reducing balance`],
+    ['Loan Tenure', `${approvedTenure} months`],
+    ['Monthly EMI', approvedEmi ? formatINR(approvedEmi) : 'To be confirmed before disbursement'],
     ['Processing Fee (Non-Refundable)', formatINR(app.processingFee || 0)],
-    ['Disbursement Account', `${app.financialInfo.bankName} - A/C No: ${app.financialInfo.accountNumber}`],
-    ['Sanction Letter Validity', '15 Days from date of issue'],
+    ['Disbursement Account', `${app.financialInfo.bankName} - A/C ${app.financialInfo.accountNumber}`],
+    ['Sanction Validity', '15 days from date of issue'],
   ];
 
-  doc.setFillColor(241, 245, 249);
-  doc.rect(14, y, 182, 8 * 7 + 2, 'F');
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(10);
+  doc.setTextColor(15, 23, 42);
+  doc.text('Sanctioned Loan Terms', 14, y);
+  y += 5;
+  const rowHeight = 8;
+  const tableHeight = rowHeight * terms.length;
+  doc.setFillColor(248, 250, 252);
+  doc.rect(14, y, 182, tableHeight, 'F');
   doc.setDrawColor(203, 213, 225);
-  doc.rect(14, y, 182, 8 * 7 + 2, 'S');
+  doc.rect(14, y, 182, tableHeight, 'S');
 
   terms.forEach(([label, val], idx) => {
-    const rowY = y + 6 + (idx * 7);
+    const rowTop = y + idx * rowHeight;
+    if (idx % 2 === 1) {
+      doc.setFillColor(255, 255, 255);
+      doc.rect(14, rowTop, 182, rowHeight, 'F');
+    }
+    doc.setDrawColor(226, 232, 240);
+    doc.line(14, rowTop + rowHeight, 196, rowTop + rowHeight);
+    const rowY = rowTop + 5.5;
     doc.setFont('helvetica', 'bold');
+    doc.setTextColor(51, 65, 85);
     doc.text(label, 18, rowY);
     doc.setFont('helvetica', 'normal');
-    doc.text(val, 100, rowY);
+    doc.setTextColor(15, 23, 42);
+    doc.text(String(val), 100, rowY, { maxWidth: 90 });
   });
 
-  y += 8 * 7 + 10;
+  y += tableHeight + 12;
   doc.setFont('helvetica', 'bold');
-  doc.text('Key Pre-Disbursement Conditions:', 14, y); y += 5;
+  doc.setTextColor(15, 23, 42);
+  doc.text('Key Pre-Disbursement Conditions', 14, y); y += 6;
   doc.setFont('helvetica', 'normal');
-  doc.text('1. Submission of signed Loan Agreement and NACH/Auto-Debit Mandate.', 18, y); y += 5;
-  doc.text('2. Verification of bank account details and original KYC documents.', 18, y); y += 5;
-  doc.text('3. Acceptance of sanction terms by signing and returning a copy within validity period.', 18, y);
+  doc.setTextColor(51, 65, 85);
+  const conditions = [
+    'Execution of the loan agreement, repayment schedule and all required declarations.',
+    'Successful verification of KYC documents, bank account details and borrower eligibility.',
+    'Payment of applicable processing fee and charges through approved digital payment modes.',
+    'Final lender approval before disbursement into the verified borrower bank account.',
+  ];
+  conditions.forEach((condition, idx) => {
+    doc.text(`${idx + 1}. ${condition}`, 18, y, { maxWidth: 174 });
+    y += 5;
+  });
+
+  y += 5;
+  doc.setFillColor(255, 251, 235);
+  doc.setDrawColor(253, 230, 138);
+  doc.roundedRect(14, y, 182, 18, 2, 2, 'FD');
+  doc.setFont('helvetica', 'bold');
+  doc.setTextColor(146, 64, 14);
+  doc.text('Important:', 18, y + 7);
+  doc.setFont('helvetica', 'normal');
+  doc.text('This sanction letter is not a cash approval guarantee. Disbursement is completed only after final verification and agreement completion.', 36, y + 7, { maxWidth: 154 });
+  doc.text('Do not pay cash to any person claiming guaranteed loan release.', 36, y + 13, { maxWidth: 154 });
 
   drawSignatures(doc, settings, 210);
   drawFooter(doc, settings, `SANC-${app.id}`);

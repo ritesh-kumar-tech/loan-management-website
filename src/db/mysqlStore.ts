@@ -216,6 +216,23 @@ export const saveMysqlPaymentSubmission = async (payment: PaymentSubmission) => 
   );
 };
 
+export const saveMysqlNotification = async (notification: AppNotification) => {
+  await pool.query(
+    `INSERT INTO notifications (id, user_id, title, type, is_read, data_json, created_at)
+     VALUES (?, ?, ?, ?, ?, CAST(? AS JSON), ?)
+     ON DUPLICATE KEY UPDATE title = VALUES(title), type = VALUES(type), is_read = VALUES(is_read), data_json = VALUES(data_json)`,
+    [
+      notification.id,
+      notification.userId,
+      notification.title,
+      notification.type,
+      boolInt(notification.read),
+      json(notification),
+      toDate(notification.createdAt),
+    ]
+  );
+};
+
 export const saveMysqlReceipt = async (receipt: Receipt) => {
   await pool.query(
     `INSERT INTO receipts (receipt_number, payment_id, loan_account_id, application_id, customer_name, amount_paid, utr_number, data_json, verification_date)

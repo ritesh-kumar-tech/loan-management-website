@@ -80,7 +80,7 @@ export const PolicyPages: React.FC<PolicyPagesProps> = ({ type, settings }) => {
             </div>
 
             <p className="text-xs text-slate-500">
-              Complaints received by the Grievance Officer shall be acknowledged within 24 hours and resolved within 15 working days.
+              Complaints received by the Grievance Redressal Cell will be taken up seriously and addressed within 5 working days.
             </p>
           </>
         )}

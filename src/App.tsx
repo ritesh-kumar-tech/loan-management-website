@@ -114,26 +114,9 @@ export default function App() {
       if (!applicationId) return;
 
       setRestoringCustomerSession(true);
-      try {
-        const res = await api.trackApplication({
-          identifier: decodeURIComponent(applicationId),
-          otp: '123456',
-          stage: 2,
-        });
-
-        if (res.success && res.application) {
-          setVerifiedCustomerApp(res.application);
-          setVerifiedCustomerLoan(res.loanAccount || null);
-          window.localStorage.setItem('verifiedApplicationId', res.application.id);
-        } else {
-          setActiveTab('track', '/track-status');
-        }
-      } catch (e) {
-        console.error('Failed to restore verified customer session', e);
-        setActiveTab('track', '/track-status');
-      } finally {
-        setRestoringCustomerSession(false);
-      }
+      window.localStorage.removeItem('verifiedApplicationId');
+      setActiveTab('track', '/track-status');
+      setRestoringCustomerSession(false);
     };
 
     restoreVerifiedCustomer();

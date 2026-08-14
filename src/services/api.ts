@@ -91,6 +91,24 @@ export const api = {
     return data.eligibilityResult;
   },
 
+  async sendOtp(payload: { identifier: string; purpose: 'APPLICATION_EMAIL' | 'TRACK_APPLICATION' }): Promise<{ success: boolean; maskedContact?: string; cooldownSeconds?: number; message?: string; error?: string }> {
+    const res = await fetch('/api/otp/send', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    return await res.json();
+  },
+
+  async verifyOtp(payload: { identifier: string; purpose: 'APPLICATION_EMAIL' | 'TRACK_APPLICATION'; otp: string }): Promise<{ success: boolean; verificationToken?: string; error?: string }> {
+    const res = await fetch('/api/otp/verify', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    return await res.json();
+  },
+
   async getApplications(userId?: string): Promise<LoanApplication[]> {
     try {
       const url = userId ? `/api/applications?userId=${userId}` : '/api/applications';
@@ -142,6 +160,7 @@ export const api = {
       body: JSON.stringify(application),
     });
     const data = await res.json();
+    if (!res.ok || !data.application) throw new Error(data.error || 'We could not submit your application. Please try again.');
     return data.application;
   },
 

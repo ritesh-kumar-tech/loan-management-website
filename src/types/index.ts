@@ -184,6 +184,7 @@ export interface LoanApplication {
   approvedEmi?: number;
   approvalDate?: string;
   rejectionReason?: string;
+  emailVerificationToken?: string;
   
   createdAt: string;
   updatedAt: string;

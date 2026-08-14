@@ -1,8 +1,9 @@
 import express from 'express';
+import crypto from 'crypto';
 import path from 'path';
 import { createServer as createViteServer } from 'vite';
 import { calculateEmi, calculateFOIR } from './src/utils/calculator';
-import { ApplicationStatus, EligibilityResult, LoanApplication, Receipt, SupportTicket } from './src/types';
+import { ApplicationStatus, AppNotification, EligibilityResult, LoanApplication, Receipt, SupportTicket } from './src/types';
 import {
   findUserAuthByEmail,
   getCollections,
@@ -14,6 +15,7 @@ import {
   saveEligibilityRule,
   saveLoanAccount,
   saveLoanProduct,
+  saveNotification,
   savePaymentSubmission,
   saveReceipt,
   saveSettings,
@@ -22,6 +24,7 @@ import {
   saveUser,
 } from './src/db/appStore';
 import { hashPassword, maskApplicationForPublic, verifyPassword } from './src/db/security';
+import { maskEmail, sendApplicationConfirmationEmail, sendOtpEmail } from './src/utils/mailer';
 
 interface CreateAppOptions {
   serveClient?: boolean;
@@ -67,6 +70,105 @@ export async function createApp({ serveClient = true }: CreateAppOptions = {}) {
     void saveAuditLog(log);
   };
 
+  const addNotification = (notification: Omit<AppNotification, 'id' | 'createdAt' | 'read'> & Partial<Pick<AppNotification, 'id' | 'createdAt' | 'read'>>) => {
+    const item: AppNotification = {
+      id: notification.id || `ntf_${Date.now()}_${Math.floor(Math.random() * 10000)}`,
+      userId: notification.userId,
+      title: notification.title,
+      message: notification.message,
+      type: notification.type,
+      read: notification.read ?? false,
+      createdAt: notification.createdAt || new Date().toISOString(),
+      link: notification.link,
+    };
+
+    notifications = [item, ...notifications.filter((existing) => existing.id !== item.id)];
+    void saveNotification(item);
+    return item;
+  };
+
+  type OtpPurpose = 'APPLICATION_EMAIL' | 'TRACK_APPLICATION';
+  const otpRecords = new Map<string, {
+    identifier: string;
+    purpose: OtpPurpose;
+    otpHash: string;
+    expiresAt: number;
+    attempts: number;
+    sends: number;
+    lastSentAt: number;
+    verifiedAt?: number;
+    token?: string;
+  }>();
+  const OTP_TTL_MS = 5 * 60 * 1000;
+  const OTP_COOLDOWN_MS = 60 * 1000;
+  const OTP_MAX_ATTEMPTS = 5;
+  const OTP_MAX_SENDS = 5;
+
+  const normalizeIdentifier = (value: string) => String(value || '').trim().toLowerCase();
+  const otpKey = (identifier: string, purpose: OtpPurpose) => `${purpose}:${normalizeIdentifier(identifier)}`;
+  const hashOtp = (otp: string) => crypto.createHash('sha256').update(`${otp}:${process.env.OTP_SECRET || 'dhani-local-otp-secret'}`).digest('hex');
+  const makeOtp = () => String(crypto.randomInt(0, 1000000)).padStart(6, '0');
+  const makeVerificationToken = () => crypto.randomBytes(24).toString('hex');
+  const maskContact = (value: string) => value.includes('@')
+    ? maskEmail(value)
+    : value.replace(/^(\d{2})\d+(\d{2})$/, '$1******$2');
+
+  const createOtp = async (identifier: string, purpose: OtpPurpose, label: string) => {
+    const normalized = normalizeIdentifier(identifier);
+    if (!normalized) return { ok: false, error: 'Please enter a valid email or contact.' };
+    const key = otpKey(normalized, purpose);
+    const existing = otpRecords.get(key);
+    const nowMs = Date.now();
+    if (existing && nowMs - existing.lastSentAt < OTP_COOLDOWN_MS) {
+      return { ok: false, error: 'Please wait before requesting another OTP.' };
+    }
+    if (existing && existing.sends >= OTP_MAX_SENDS && nowMs < existing.expiresAt) {
+      return { ok: false, error: 'Too many OTP requests. Please try again after a few minutes.' };
+    }
+
+    const otp = makeOtp();
+    otpRecords.set(key, {
+      identifier: normalized,
+      purpose,
+      otpHash: hashOtp(otp),
+      expiresAt: nowMs + OTP_TTL_MS,
+      attempts: 0,
+      sends: (existing?.sends || 0) + 1,
+      lastSentAt: nowMs,
+    });
+    await sendOtpEmail(settings, normalized, otp, label);
+    return { ok: true, masked: maskContact(normalized) };
+  };
+
+  const verifyOtp = (identifier: string, purpose: OtpPurpose, otp: string) => {
+    const key = otpKey(identifier, purpose);
+    const record = otpRecords.get(key);
+    const nowMs = Date.now();
+    if (!record || record.verifiedAt || nowMs > record.expiresAt) {
+      return { ok: false, error: 'The OTP is incorrect or has expired.' };
+    }
+    if (record.attempts >= OTP_MAX_ATTEMPTS) {
+      return { ok: false, error: 'Too many incorrect attempts. Please request a new OTP.' };
+    }
+    record.attempts += 1;
+    if (record.otpHash !== hashOtp(String(otp || '').trim())) {
+      otpRecords.set(key, record);
+      return { ok: false, error: 'The OTP is incorrect or has expired.' };
+    }
+    record.verifiedAt = nowMs;
+    record.token = makeVerificationToken();
+    otpRecords.set(key, record);
+    return { ok: true, token: record.token };
+  };
+
+  const consumeVerifiedOtp = (identifier: string, purpose: OtpPurpose, token: string) => {
+    const key = otpKey(identifier, purpose);
+    const record = otpRecords.get(key);
+    if (!record || !record.verifiedAt || record.token !== token || Date.now() > record.expiresAt) return false;
+    otpRecords.delete(key);
+    return true;
+  };
+
   // ---------------- API ROUTES ----------------
 
   // Health check
@@ -84,6 +186,50 @@ export async function createApp({ serveClient = true }: CreateAppOptions = {}) {
     saveSettings(settings);
     addAuditLog('usr_admin_1', 'admin', 'admin@dhanifinance.in', 'SETTINGS_UPDATED', 'CompanySettings', 'global', 'Updated company branding settings');
     res.json({ success: true, settings });
+  });
+
+  app.post('/api/otp/send', async (req, res) => {
+    const { identifier, purpose } = req.body;
+    const normalizedPurpose: OtpPurpose = purpose === 'TRACK_APPLICATION' ? 'TRACK_APPLICATION' : 'APPLICATION_EMAIL';
+    const normalizedIdentifier = normalizeIdentifier(identifier);
+    const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+    if (!emailPattern.test(normalizedIdentifier)) {
+      res.status(400).json({ success: false, error: 'Please enter a valid email address.' });
+      return;
+    }
+
+    try {
+      const result = await createOtp(
+        normalizedIdentifier,
+        normalizedPurpose,
+        normalizedPurpose === 'TRACK_APPLICATION' ? 'Track Your Application' : 'Verify Your Email'
+      );
+      if (!result.ok) {
+        res.status(429).json({ success: false, error: result.error });
+        return;
+      }
+      res.json({
+        success: true,
+        maskedContact: result.masked,
+        cooldownSeconds: 60,
+        message: 'If the email is valid, a verification code has been sent.',
+      });
+    } catch (error) {
+      console.error('OTP email send failed', error);
+      res.status(500).json({ success: false, error: "We couldn't send the OTP. Please try again." });
+    }
+  });
+
+  app.post('/api/otp/verify', (req, res) => {
+    const { identifier, purpose, otp } = req.body;
+    const normalizedPurpose: OtpPurpose = purpose === 'TRACK_APPLICATION' ? 'TRACK_APPLICATION' : 'APPLICATION_EMAIL';
+    const result = verifyOtp(identifier, normalizedPurpose, otp);
+    if (!result.ok) {
+      res.status(400).json({ success: false, error: result.error });
+      return;
+    }
+    res.json({ success: true, verificationToken: result.token });
   });
 
   // Auth: Login
@@ -247,7 +393,7 @@ export async function createApp({ serveClient = true }: CreateAppOptions = {}) {
 
   const normPhone = (str: string) => String(str || '').replace(/\D/g, '').slice(-10);
 
-  app.post('/api/applications/track', (req, res) => {
+  app.post('/api/applications/track', async (req, res) => {
     const { identifier, applicationId, contact, otp, stage } = req.body;
     const rawSearch = String(identifier || applicationId || contact || '').trim();
     const lookupValue = rawSearch.toLowerCase();
@@ -273,25 +419,39 @@ export async function createApp({ serveClient = true }: CreateAppOptions = {}) {
 
     // Stage 1: Verify existence of application before requesting OTP
     if (stage === 1 || (!otp && stage !== 2)) {
-      const maskedMobile = appItem.personalInfo?.mobile
-        ? appItem.personalInfo.mobile.replace(/^(\d{2})\d+(\d{2})$/, '$1******$2')
-        : '******';
+      const trackEmail = normalizeIdentifier(appItem.personalInfo?.email || '');
+      if (!trackEmail) {
+        res.status(400).json({ success: false, error: 'This application does not have an email address for OTP verification. Please contact support.' });
+        return;
+      }
+      try {
+        const otpResult = await createOtp(trackEmail, 'TRACK_APPLICATION', 'Track Your Application');
+        if (!otpResult.ok) {
+          res.status(429).json({ success: false, error: otpResult.error });
+          return;
+        }
+      } catch (error) {
+        console.error('Track OTP send failed', error);
+        res.status(500).json({ success: false, error: "We couldn't send the OTP. Please try again." });
+        return;
+      }
       res.json({
         success: true,
         stage: 1,
         requiresOtp: true,
         applicationId: appItem.id,
-        maskedMobile,
+        maskedMobile: maskContact(trackEmail),
         applicantName: appItem.personalInfo?.fullName,
-        message: `Application found. Enter OTP 123456 sent to registered mobile ${maskedMobile}.`,
+        message: `A verification code has been sent to ${maskContact(trackEmail)}.`,
       });
       return;
     }
 
     // Stage 2: Verify OTP
-    if (String(otp || '').trim() !== '123456') {
+    const verification = verifyOtp(appItem.personalInfo?.email || rawSearch, 'TRACK_APPLICATION', otp);
+    if (!verification.ok) {
       addAuditLog('public', 'guest', rawSearch, 'TRACKING_VERIFICATION_FAILED', 'LoanApplication', appItem.id, 'OTP verification failed');
-      res.status(403).json({ success: false, error: 'Verification failed. Please enter the valid OTP 123456.' });
+      res.status(403).json({ success: false, error: verification.error });
       return;
     }
 
@@ -311,7 +471,7 @@ export async function createApp({ serveClient = true }: CreateAppOptions = {}) {
   });
 
   app.post('/api/applications', (req, res) => {
-    const data = req.body;
+    const { emailVerificationToken, ...data } = req.body;
     let appItem: LoanApplication;
 
     if (data.id && applications.some((a) => a.id === data.id)) {
@@ -319,6 +479,11 @@ export async function createApp({ serveClient = true }: CreateAppOptions = {}) {
       appItem = { ...applications[idx], ...data, updatedAt: new Date().toISOString() };
       applications[idx] = appItem;
     } else {
+      const applicantEmail = data.personalInfo?.email;
+      if (!consumeVerifiedOtp(applicantEmail, 'APPLICATION_EMAIL', emailVerificationToken)) {
+        res.status(403).json({ success: false, error: 'Please verify your email address before submitting the application.' });
+        return;
+      }
       const appSeq = String(applications.length + 101).padStart(6, '0');
       const newId = `LN-2026-${appSeq}`;
       appItem = {
@@ -335,6 +500,27 @@ export async function createApp({ serveClient = true }: CreateAppOptions = {}) {
     }
 
     saveApplication(appItem);
+    void sendApplicationConfirmationEmail(settings, appItem.personalInfo?.email, {
+      applicantName: appItem.personalInfo?.fullName || 'Applicant',
+      applicationId: appItem.id,
+      status: appItem.status,
+    }).catch((error) => console.error('Application confirmation email failed', error));
+    addNotification({
+      userId: 'usr_admin_1',
+      title: 'Application saved',
+      message: `${appItem.personalInfo?.fullName || 'A customer'} saved loan application ${appItem.id}.`,
+      type: 'info',
+      link: `/admin/applications/${appItem.id}`,
+    });
+    if (appItem.userId) {
+      addNotification({
+        userId: appItem.userId,
+        title: 'Application received',
+        message: `Your loan application ${appItem.id} has been saved successfully.`,
+        type: 'success',
+        link: `/dashboard/applications/${appItem.id}`,
+      });
+    }
     addAuditLog(appItem.userId || 'usr_guest', 'customer', appItem.personalInfo?.email || 'user', 'APPLICATION_SAVED', 'LoanApplication', appItem.id, `Saved loan application ${appItem.id}`);
     res.json({ success: true, application: appItem });
   });
@@ -421,6 +607,13 @@ export async function createApp({ serveClient = true }: CreateAppOptions = {}) {
     applications[idx] = appItem;
     saveApplication(appItem);
 
+    addNotification({
+      userId: appItem.userId || 'usr_guest',
+      title: 'Application status updated',
+      message: `Application ${appItem.id} is now ${String(status).replace(/_/g, ' ')}.`,
+      type: status === 'rejected' ? 'alert' : status === 'approved' || status === 'loan_disbursed' || status === 'active' ? 'success' : 'info',
+      link: `/dashboard/applications/${appItem.id}`,
+    });
     addAuditLog('usr_admin_1', 'admin', 'admin@dhanifinance.in', 'APPLICATION_STATUS_UPDATED', 'LoanApplication', appItem.id, `Updated status to ${status}`);
     res.json({ success: true, application: appItem });
   });
@@ -458,6 +651,13 @@ export async function createApp({ serveClient = true }: CreateAppOptions = {}) {
     appItem.updatedAt = new Date().toISOString();
     saveApplication(appItem);
 
+    addNotification({
+      userId: appItem.userId || 'usr_guest',
+      title: 'Processing fee requested',
+      message: `Processing fee of Rs ${fee.toLocaleString('en-IN')} is pending for application ${appItem.id}.`,
+      type: 'warning',
+      link: `/dashboard/applications/${appItem.id}`,
+    });
     addAuditLog('usr_admin_1', 'admin', 'admin@dhanifinance.in', 'PROCESSING_FEE_REQUESTED', 'LoanApplication', appItem.id, `Requested processing fee ₹${fee}`);
     res.json({ success: true, application: appItem });
   });
@@ -503,6 +703,13 @@ export async function createApp({ serveClient = true }: CreateAppOptions = {}) {
 
     paymentSubmissions.unshift(newPayment);
     savePaymentSubmission(newPayment);
+    addNotification({
+      userId: 'usr_admin_1',
+      title: 'Payment submitted',
+      message: `${newPayment.customerName} submitted Rs ${Number(amount).toLocaleString('en-IN')} for ${paymentPurpose}.`,
+      type: 'info',
+      link: `/admin/payments/${newPayment.id}`,
+    });
 
     // If processing fee submission, update application status
     if (paymentPurpose === 'processing_fee' && applicationId) {
@@ -609,10 +816,24 @@ export async function createApp({ serveClient = true }: CreateAppOptions = {}) {
       saveReceipt(newReceipt);
 
       addAuditLog('usr_admin_1', 'admin', 'admin@dhanifinance.in', 'PAYMENT_VERIFIED', 'PaymentSubmission', pay.id, `Approved payment UTR ${pay.utrNumber}`);
+      addNotification({
+        userId: pay.userId || 'usr_guest',
+        title: 'Payment verified',
+        message: `Payment ${pay.id} has been verified. Receipt ${receiptNo} is available.`,
+        type: 'success',
+        link: `/dashboard/payments/${pay.id}`,
+      });
     } else {
       pay.status = 'rejected';
       pay.verificationNote = note || 'Invalid UTR or payment not reflected in bank account.';
       addAuditLog('usr_admin_1', 'admin', 'admin@dhanifinance.in', 'PAYMENT_REJECTED', 'PaymentSubmission', pay.id, `Rejected payment UTR ${pay.utrNumber}`);
+      addNotification({
+        userId: pay.userId || 'usr_guest',
+        title: 'Payment rejected',
+        message: `Payment ${pay.id} could not be verified. Please review the note and submit again.`,
+        type: 'alert',
+        link: `/dashboard/payments/${pay.id}`,
+      });
     }
 
     paymentSubmissions[payIdx] = pay;
@@ -644,6 +865,13 @@ export async function createApp({ serveClient = true }: CreateAppOptions = {}) {
         supportTickets[idx].messages.push({ sender, text, date: new Date().toISOString() });
         supportTickets[idx].updatedAt = new Date().toISOString();
         saveSupportTicket(supportTickets[idx]);
+        addNotification({
+          userId: sender === 'support' ? supportTickets[idx].userId : 'usr_admin_1',
+          title: sender === 'support' ? 'Support replied' : 'Customer support message',
+          message: `${sender === 'support' ? 'Support' : supportTickets[idx].customerName} added a message to ticket ${ticketId}.`,
+          type: 'info',
+          link: `/support/tickets/${ticketId}`,
+        });
         res.json({ success: true, ticket: supportTickets[idx] });
         return;
       }
@@ -665,12 +893,79 @@ export async function createApp({ serveClient = true }: CreateAppOptions = {}) {
 
     supportTickets.unshift(newTicket);
     saveSupportTicket(newTicket);
+    addNotification({
+      userId: 'usr_admin_1',
+      title: 'New support ticket',
+      message: `${newTicket.customerName} opened ${newTicket.subject}.`,
+      type: 'warning',
+      link: `/admin/support/${newTicket.id}`,
+    });
     res.json({ success: true, ticket: newTicket });
   });
 
   // Notifications
   app.get('/api/notifications', (req, res) => {
-    res.json({ success: true, notifications });
+    const { userId, read } = req.query;
+    let results = notifications;
+
+    if (userId) {
+      results = results.filter((notification) => notification.userId === String(userId));
+    }
+    if (read === 'true' || read === 'false') {
+      const isRead = read === 'true';
+      results = results.filter((notification) => notification.read === isRead);
+    }
+
+    res.json({ success: true, notifications: results });
+  });
+
+  app.post('/api/notifications', (req, res) => {
+    const { userId, title, message, type, link } = req.body;
+    if (!userId || !title || !message) {
+      res.status(400).json({ success: false, error: 'userId, title, and message are required.' });
+      return;
+    }
+
+    const notification = addNotification({
+      userId,
+      title,
+      message,
+      type: type || 'info',
+      link,
+    });
+
+    res.status(201).json({ success: true, notification });
+  });
+
+  app.patch('/api/notifications/:id', (req, res) => {
+    const { id } = req.params;
+    const idx = notifications.findIndex((notification) => notification.id === id);
+    if (idx === -1) {
+      res.status(404).json({ success: false, error: 'Notification not found' });
+      return;
+    }
+
+    const nextRead = typeof req.body.read === 'boolean' ? req.body.read : true;
+    const updated = { ...notifications[idx], read: nextRead };
+    notifications[idx] = updated;
+    void saveNotification(updated);
+    res.json({ success: true, notification: updated });
+  });
+
+  app.post('/api/notifications/read-all', (req, res) => {
+    const { userId } = req.body;
+    if (!userId) {
+      res.status(400).json({ success: false, error: 'userId is required.' });
+      return;
+    }
+
+    const updated = notifications.filter((notification) => notification.userId === userId && !notification.read);
+    updated.forEach((notification) => {
+      notification.read = true;
+      void saveNotification(notification);
+    });
+
+    res.json({ success: true, updatedCount: updated.length });
   });
 
   // Audit Logs
@@ -789,7 +1084,11 @@ export async function createApp({ serveClient = true }: CreateAppOptions = {}) {
       const doc = appItem.documents.find((d) => d.id === documentId);
       if (doc) {
         doc.status = status;
-        if (rejectionNote) doc.rejectionNote = rejectionNote;
+        if (status === 'rejected' && rejectionNote) {
+          doc.rejectionNote = rejectionNote;
+        } else if (status === 'verified') {
+          delete doc.rejectionNote;
+        }
         appItem.updatedAt = new Date().toISOString();
         saveApplication(appItem);
         addAuditLog('usr_admin_1', 'admin', 'admin@dhanifinance.in', 'DOCUMENT_VERIFIED', 'ApplicationDocument', documentId, `Document ${doc.title} marked ${status}`);

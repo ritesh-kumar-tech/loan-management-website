@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { 
   FileText, 
   Search, 
@@ -8,6 +8,7 @@ import {
   Clock, 
   Eye, 
   Download, 
+  ExternalLink,
   X, 
   ShieldCheck, 
   Calculator, 
@@ -18,7 +19,9 @@ import {
   ChevronRight,
   UserCheck,
   Building2,
-  Check
+  Check,
+  Plus,
+  Trash2
 } from 'lucide-react';
 import { LoanApplication, ApplicationStatus } from '../../../types';
 import { formatINR, formatDate, calculateEmi, calculateFOIR } from '../../../utils/calculator';
@@ -55,6 +58,12 @@ export const ApplicationManagementView: React.FC<ApplicationManagementViewProps>
   const [approveNote, setApproveNote] = useState<string>('');
   const [rejectionReason, setRejectionReason] = useState<string>('');
   const [isActionLoading, setIsActionLoading] = useState(false);
+  const modalBodyRef = useRef<HTMLDivElement | null>(null);
+  const [previewedDocId, setPreviewedDocId] = useState<string | null>(null);
+  const [rejectingDocId, setRejectingDocId] = useState<string | null>(null);
+  const [docRejectNote, setDocRejectNote] = useState('');
+  const [processingBaseFee, setProcessingBaseFee] = useState(2000);
+  const [processingExpenses, setProcessingExpenses] = useState<{ id: string; label: string; amount: number }[]>([]);
 
   const filteredApps = applications.filter((app) => {
     const matchesSearch = 
@@ -76,6 +85,11 @@ export const ApplicationManagementView: React.FC<ApplicationManagementViewProps>
     setApproveTenure(app.approvedTenureMonths || app.requestedTenureMonths || 24);
     setApproveNote('');
     setRejectionReason('');
+    setPreviewedDocId(null);
+    setRejectingDocId(null);
+    setDocRejectNote('');
+    setProcessingBaseFee(app.processingFee || Math.round(((app.approvedAmount || app.requestedAmount || 0) * 1.5) / 100) || 2000);
+    setProcessingExpenses([]);
   };
 
   const handleApprove = async () => {
@@ -111,15 +125,28 @@ export const ApplicationManagementView: React.FC<ApplicationManagementViewProps>
     }
   };
 
-  const handleDocVerify = async (docId: string, actionStatus: 'verified' | 'rejected') => {
+  useEffect(() => {
+    if (selectedApp) modalBodyRef.current?.scrollTo({ top: 0 });
+  }, [selectedApp?.id]);
+
+  const handleDocVerify = async (docId: string, actionStatus: 'verified' | 'rejected', note?: string) => {
     if (!selectedApp) return;
-    await onVerifyDocument(selectedApp.id, docId, actionStatus);
-    const updatedDocs = selectedApp.documents.map(d => d.id === docId ? { ...d, status: actionStatus } : d);
+    await onVerifyDocument(selectedApp.id, docId, actionStatus, note);
+    const updatedDocs = selectedApp.documents.map(d => {
+      if (d.id !== docId) return d;
+      return actionStatus === 'verified'
+        ? { ...d, status: actionStatus, rejectionNote: undefined }
+        : { ...d, status: actionStatus, rejectionNote: note };
+    });
     setSelectedApp({ ...selectedApp, documents: updatedDocs });
+    setRejectingDocId(null);
+    setDocRejectNote('');
   };
 
   // Preview EMI calculation in approval box
   const previewCalc = calculateEmi(approveAmount, approveRate, approveTenure, 1.5);
+  const processingExpenseTotal = processingExpenses.reduce((sum, item) => sum + (Number(item.amount) || 0), 0);
+  const processingFeeTotal = Math.max(0, Number(processingBaseFee) || 0) + processingExpenseTotal;
 
   return (
     <div className="space-y-6 animate-in fade-in duration-150">
@@ -251,8 +278,8 @@ export const ApplicationManagementView: React.FC<ApplicationManagementViewProps>
 
       {/* Credit Underwriting Workspace Modal */}
       {selectedApp && (
-        <div className="fixed inset-0 z-50 bg-slate-900/70 backdrop-blur-xs flex items-center justify-center p-4 overflow-y-auto">
-          <div className="bg-white rounded-3xl max-w-4xl w-full p-6 shadow-2xl border border-slate-200 space-y-6 animate-in zoom-in-95 duration-150 my-6">
+        <div className="fixed inset-0 z-50 bg-slate-900/70 backdrop-blur-xs flex items-start justify-center p-3 sm:p-4 overflow-hidden">
+          <div ref={modalBodyRef} className="bg-white rounded-3xl max-w-5xl w-full max-h-[calc(100vh-1.5rem)] sm:max-h-[calc(100vh-2rem)] overflow-y-auto p-4 sm:p-6 shadow-2xl border border-slate-200 space-y-6 animate-in zoom-in-95 duration-150">
             {/* Modal Top Banner */}
             <div className="flex items-start justify-between border-b border-slate-100 pb-4">
               <div>
@@ -392,29 +419,86 @@ export const ApplicationManagementView: React.FC<ApplicationManagementViewProps>
                       </span>
                     </div>
 
+                    {previewedDocId === doc.id && (
+                      <div className="rounded-xl border border-slate-200 bg-slate-50 overflow-hidden">
+                        {doc.fileUrl ? (
+                          doc.fileUrl.match(/\.(png|jpe?g|webp|gif)$/i) || doc.fileUrl.startsWith('data:image') ? (
+                            <img src={doc.fileUrl} alt={doc.title} className="h-48 w-full object-contain bg-white" />
+                          ) : (
+                            <iframe title={doc.title} src={doc.fileUrl} className="h-48 w-full bg-white" />
+                          )
+                        ) : (
+                          <div className="h-32 grid place-items-center text-slate-400 font-semibold">No preview file available</div>
+                        )}
+                      </div>
+                    )}
+
                     {doc.rejectionNote && (
                       <div className="text-[11px] text-rose-700 font-medium bg-rose-50 p-1.5 rounded-lg border border-rose-100">
                         Reason: {doc.rejectionNote}
                       </div>
                     )}
 
-                    <div className="flex items-center gap-1 pt-1 border-t border-slate-100">
+                    {rejectingDocId === doc.id && (
+                      <div className="rounded-xl border border-rose-200 bg-rose-50 p-2 space-y-2">
+                        <label className="block text-[10px] font-extrabold uppercase tracking-wider text-rose-800">Reason visible to customer</label>
+                        <textarea
+                          value={docRejectNote}
+                          onChange={(e) => setDocRejectNote(e.target.value)}
+                          rows={2}
+                          placeholder="Example: Please upload the latest 6-month bank statement with all pages visible."
+                          className="w-full rounded-lg border border-rose-200 bg-white px-2 py-1.5 text-xs text-slate-900 focus:ring-2 focus:ring-rose-300"
+                        />
+                        <div className="flex justify-end gap-1">
+                          <button
+                            onClick={() => {
+                              setRejectingDocId(null);
+                              setDocRejectNote('');
+                            }}
+                            className="px-2.5 py-1 rounded-lg bg-white text-slate-600 border border-slate-200 font-bold text-[10px] cursor-pointer"
+                          >
+                            Cancel
+                          </button>
+                          <button
+                            onClick={() => docRejectNote.trim() && handleDocVerify(doc.id, 'rejected', docRejectNote.trim())}
+                            disabled={!docRejectNote.trim()}
+                            className="px-2.5 py-1 rounded-lg bg-rose-600 text-white font-bold text-[10px] cursor-pointer disabled:opacity-50"
+                          >
+                            Save Rejection
+                          </button>
+                        </div>
+                      </div>
+                    )}
+
+                    <div className="flex flex-wrap items-center gap-1 pt-1 border-t border-slate-100">
+                      <button
+                        onClick={() => setPreviewedDocId(previewedDocId === doc.id ? null : doc.id)}
+                        className="flex-1 min-w-24 py-1 rounded-lg bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 font-bold text-[10px] cursor-pointer inline-flex items-center justify-center gap-1"
+                      >
+                        <Eye className="w-3 h-3" /> {previewedDocId === doc.id ? 'Hide' : 'View'}
+                      </button>
+                      {doc.fileUrl && (
+                        <a
+                          href={doc.fileUrl}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="flex-1 min-w-24 py-1 rounded-lg bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 font-bold text-[10px] cursor-pointer inline-flex items-center justify-center gap-1"
+                        >
+                          <ExternalLink className="w-3 h-3" /> Open
+                        </a>
+                      )}
                       <button
                         onClick={() => handleDocVerify(doc.id, 'verified')}
-                        className="flex-1 py-1 rounded-lg bg-blue-700 hover:bg-blue-800 text-white font-bold text-[10px] cursor-pointer"
+                        className="flex-1 min-w-24 py-1 rounded-lg bg-blue-700 hover:bg-blue-800 text-white font-bold text-[10px] cursor-pointer"
                       >
                         Verify
                       </button>
                       <button
                         onClick={() => {
-                          const note = prompt('Enter rejection reason for customer (e.g. Please upload latest 6-month statement):');
-                          if (note !== null) {
-                            onVerifyDocument(selectedApp.id, doc.id, 'rejected', note);
-                            const updatedDocs = selectedApp.documents.map(d => d.id === doc.id ? { ...d, status: 'rejected' as const, rejectionNote: note } : d);
-                            setSelectedApp({ ...selectedApp, documents: updatedDocs });
-                          }
+                          setRejectingDocId(doc.id);
+                          setDocRejectNote(doc.rejectionNote || '');
                         }}
-                        className="flex-1 py-1 rounded-lg bg-slate-100 hover:bg-rose-100 text-slate-700 hover:text-rose-700 font-bold text-[10px] cursor-pointer"
+                        className="flex-1 min-w-24 py-1 rounded-lg bg-slate-100 hover:bg-rose-100 text-slate-700 hover:text-rose-700 font-bold text-[10px] cursor-pointer"
                       >
                         Reject
                       </button>
@@ -435,7 +519,7 @@ export const ApplicationManagementView: React.FC<ApplicationManagementViewProps>
                   <strong>Notice:</strong> All mandatory documents must be verified before the processing fee can be requested. ({selectedApp.documents?.filter((d) => d.status !== 'verified').length} document(s) pending).
                 </div>
               ) : selectedApp.status === 'documents_verified' || selectedApp.status === 'submitted' || selectedApp.status === 'under_review' ? (
-                <div className="flex flex-col sm:flex-row items-center justify-between gap-3 bg-white p-3 rounded-xl border border-sky-100">
+                <div className="bg-white p-3 rounded-xl border border-sky-100 space-y-3">
                   <div>
                     <span className="font-bold text-slate-900 block text-xs">All Documents Verified ✓</span>
                     <span className="text-slate-500 text-[11px]">Request customer to pay loan application processing fee.</span>
@@ -443,8 +527,8 @@ export const ApplicationManagementView: React.FC<ApplicationManagementViewProps>
                   <div className="flex items-center gap-2">
                     <input
                       type="number"
-                      value={selectedApp.processingFee || 2000}
-                      onChange={(e) => setSelectedApp({ ...selectedApp, processingFee: Number(e.target.value) })}
+                      value={processingBaseFee}
+                      onChange={(e) => setProcessingBaseFee(Number(e.target.value))}
                       className="w-24 px-2 py-1.5 border border-slate-300 rounded-lg text-xs font-bold"
                       placeholder="₹2000"
                     />
@@ -452,7 +536,7 @@ export const ApplicationManagementView: React.FC<ApplicationManagementViewProps>
                       onClick={async () => {
                         setIsActionLoading(true);
                         try {
-                          const fee = selectedApp.processingFee || 2000;
+                          const fee = processingFeeTotal;
                           await onUpdateStatus(selectedApp.id, {
                             status: 'processing_fee_pending',
                             processingFee: fee,
@@ -463,10 +547,54 @@ export const ApplicationManagementView: React.FC<ApplicationManagementViewProps>
                           setIsActionLoading(false);
                         }
                       }}
-                      className="px-4 py-2 bg-sky-700 hover:bg-sky-800 text-white font-bold rounded-xl text-xs cursor-pointer shadow-xs"
+                      disabled={processingFeeTotal <= 0 || isActionLoading}
+                      className="px-4 py-2 bg-sky-700 hover:bg-sky-800 text-white font-bold rounded-xl text-xs cursor-pointer shadow-xs disabled:opacity-50"
                     >
-                      Request Processing Fee
+                      Send Fee Request
                     </button>
+                  </div>
+
+                  <div className="border-t border-sky-100 pt-3 space-y-2">
+                    <div className="flex items-center justify-between">
+                      <span className="text-[11px] font-extrabold uppercase tracking-wider text-slate-500">Other expenses</span>
+                      <button
+                        onClick={() => setProcessingExpenses([...processingExpenses, { id: `fee_${Date.now()}`, label: 'Additional expense', amount: 0 }])}
+                        className="px-2.5 py-1 rounded-lg bg-sky-100 hover:bg-sky-200 text-sky-800 font-bold text-[10px] inline-flex items-center gap-1 cursor-pointer"
+                      >
+                        <Plus className="w-3 h-3" /> Add
+                      </button>
+                    </div>
+
+                    {processingExpenses.map((expense) => (
+                      <div key={expense.id} className="grid grid-cols-1 sm:grid-cols-[1fr_120px_32px] gap-2">
+                        <input
+                          value={expense.label}
+                          onChange={(e) => setProcessingExpenses(processingExpenses.map((item) => item.id === expense.id ? { ...item, label: e.target.value } : item))}
+                          className="w-full px-3 py-2 border border-slate-200 rounded-lg text-xs font-semibold"
+                          placeholder="Expense name"
+                        />
+                        <input
+                          type="number"
+                          value={expense.amount}
+                          onChange={(e) => setProcessingExpenses(processingExpenses.map((item) => item.id === expense.id ? { ...item, amount: Number(e.target.value) } : item))}
+                          className="w-full px-3 py-2 border border-slate-300 rounded-lg text-xs font-bold"
+                          placeholder="Amount"
+                        />
+                        <button
+                          onClick={() => setProcessingExpenses(processingExpenses.filter((item) => item.id !== expense.id))}
+                          className="h-9 rounded-lg bg-rose-50 text-rose-700 hover:bg-rose-100 grid place-items-center cursor-pointer"
+                          aria-label="Remove expense"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    ))}
+
+                    <div className="rounded-xl bg-slate-900 text-white p-3 grid grid-cols-1 sm:grid-cols-3 gap-2 text-[11px]">
+                      <div>Base Fee: <strong>{formatINR(processingBaseFee || 0)}</strong></div>
+                      <div>Other Expenses: <strong>{formatINR(processingExpenseTotal)}</strong></div>
+                      <div className="sm:text-right">Total Payable: <strong className="text-emerald-300">{formatINR(processingFeeTotal)}</strong></div>
+                    </div>
                   </div>
                 </div>
               ) : selectedApp.status === 'processing_fee_submitted' ? (

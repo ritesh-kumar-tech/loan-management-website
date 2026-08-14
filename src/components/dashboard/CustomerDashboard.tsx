@@ -365,22 +365,72 @@ export const CustomerDashboard: React.FC<CustomerDashboardProps> = ({
                     </div>
                   </div>
 
-                  {/* Download Action Buttons */}
-                  <div className="pt-2 flex flex-wrap gap-2">
-                    <button
-                      onClick={() => generateApplicationAcknowledgement(app, settings)}
-                      className="px-3 py-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-xs font-bold text-slate-800 flex items-center gap-1.5 cursor-pointer"
-                    >
-                      <Download className="w-3.5 h-3.5" /> Acknowledgement PDF
-                    </button>
-                    {app.status === 'approved' && (
-                      <button
-                        onClick={() => generateSanctionLetter(app, settings)}
-                        className="px-3 py-1.5 rounded-lg bg-blue-700 hover:bg-blue-800 text-xs font-bold text-white flex items-center gap-1.5 cursor-pointer"
-                      >
-                        <Download className="w-3.5 h-3.5" /> Sanction Letter
-                      </button>
-                    )}
+                  {/* Official Letters */}
+                  <div className="rounded-2xl border border-blue-100 bg-blue-50/60 p-4 sm:p-5 space-y-4">
+                    <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-4">
+                      <div className="flex items-start gap-3">
+                        <div className="h-10 w-10 rounded-xl bg-white text-blue-700 border border-blue-100 grid place-items-center shrink-0">
+                          <FileText className="w-5 h-5" />
+                        </div>
+                        <div>
+                          <span className="text-[11px] font-extrabold uppercase tracking-wider text-blue-800">Official Letters & Documents</span>
+                          <h4 className="text-base font-black text-slate-950 mt-0.5">Loan application document center</h4>
+                          <p className="text-xs text-slate-600 mt-1 max-w-2xl">
+                            Download your application acknowledgement and approved sanction letter in the official format used for customer loan records.
+                          </p>
+                        </div>
+                      </div>
+
+                      <span className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-[11px] font-extrabold uppercase w-fit ${
+                        app.status === 'approved' || app.status === 'loan_disbursed' || app.status === 'active'
+                          ? 'bg-emerald-100 text-emerald-800'
+                          : 'bg-slate-200 text-slate-600'
+                      }`}>
+                        <ShieldCheck className="w-3.5 h-3.5" />
+                        {app.status === 'approved' || app.status === 'loan_disbursed' || app.status === 'active' ? 'Sanction Available' : 'Sanction Pending'}
+                      </span>
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-4 gap-3 text-xs">
+                      <div className="rounded-xl bg-white border border-blue-100 p-3">
+                        <span className="text-slate-500 block">Reference No.</span>
+                        <strong className="text-slate-950 font-mono">SANC/{app.id}/2026</strong>
+                      </div>
+                      <div className="rounded-xl bg-white border border-blue-100 p-3">
+                        <span className="text-slate-500 block">Sanctioned Amount</span>
+                        <strong className="text-slate-950">{formatINR(app.approvedAmount || app.requestedAmount)}</strong>
+                      </div>
+                      <div className="rounded-xl bg-white border border-blue-100 p-3">
+                        <span className="text-slate-500 block">Approved EMI</span>
+                        <strong className="text-slate-950">{app.approvedEmi ? formatINR(app.approvedEmi) : 'After approval'}</strong>
+                      </div>
+                      <div className="rounded-xl bg-white border border-blue-100 p-3">
+                        <span className="text-slate-500 block">Letter Validity</span>
+                        <strong className="text-slate-950">15 days from issue</strong>
+                      </div>
+                    </div>
+
+                    <div className="flex flex-col sm:flex-row gap-2 sm:items-center sm:justify-between">
+                      <p className="text-[11px] text-slate-500">
+                        Subject to verification, agreement execution, and final disbursement checks.
+                      </p>
+                      <div className="flex flex-wrap gap-2">
+                        <button
+                          onClick={() => generateApplicationAcknowledgement(app, settings)}
+                          className="px-4 py-2 rounded-xl bg-white hover:bg-slate-50 border border-blue-100 text-xs font-extrabold text-slate-800 flex items-center gap-1.5 cursor-pointer"
+                        >
+                          <Download className="w-3.5 h-3.5" /> Acknowledgement PDF
+                        </button>
+                        {(app.status === 'approved' || app.status === 'loan_disbursed' || app.status === 'active') && (
+                          <button
+                            onClick={() => generateSanctionLetter(app, settings)}
+                            className="px-4 py-2 rounded-xl bg-blue-700 hover:bg-blue-800 text-xs font-extrabold text-white flex items-center gap-1.5 cursor-pointer shadow-xs"
+                          >
+                            <Download className="w-3.5 h-3.5" /> Official Sanction Letter
+                          </button>
+                        )}
+                      </div>
+                    </div>
                   </div>
                 </div>
               );

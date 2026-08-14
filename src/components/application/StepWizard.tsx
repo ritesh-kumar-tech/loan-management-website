@@ -101,6 +101,13 @@ export const StepWizard: React.FC<StepWizardProps> = ({
   const [submitting, setSubmitting] = useState(false);
   const [createdApplication, setCreatedApplication] = useState<LoanApplication | null>(null);
   const [eligibilityResult, setEligibilityResult] = useState<EligibilityResult | null>(null);
+  const [emailOtp, setEmailOtp] = useState('');
+  const [emailOtpToken, setEmailOtpToken] = useState('');
+  const [emailOtpMasked, setEmailOtpMasked] = useState('');
+  const [emailOtpLoading, setEmailOtpLoading] = useState(false);
+  const [emailOtpError, setEmailOtpError] = useState<string | null>(null);
+  const [emailOtpSent, setEmailOtpSent] = useState(false);
+  const [emailOtpCooldownUntil, setEmailOtpCooldownUntil] = useState(0);
 
   const selectedProduct = products.find((p) => p.id === productId) || products[0];
   const requiredDocumentNames = selectedProduct?.requiredDocs?.length ? selectedProduct.requiredDocs : ['PAN Card', 'Aadhaar Card', 'Passport-size Photograph', 'Bank Statement'];
@@ -211,6 +218,60 @@ export const StepWizard: React.FC<StepWizardProps> = ({
     }
   };
 
+  const handleEmailChange = (email: string) => {
+    setPersonal({ ...personal, email });
+    setEmailOtp('');
+    setEmailOtpToken('');
+    setEmailOtpError(null);
+    setEmailOtpSent(false);
+  };
+
+  const sendEmailOtp = async () => {
+    const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailPattern.test(personal.email.trim())) {
+      setEmailOtpError('Please enter a valid email address before sending OTP.');
+      return;
+    }
+    setEmailOtpLoading(true);
+    setEmailOtpError(null);
+    try {
+      const res = await api.sendOtp({ identifier: personal.email.trim(), purpose: 'APPLICATION_EMAIL' });
+      if (!res.success) {
+        setEmailOtpError(res.error || "We couldn't send the OTP. Please try again.");
+        return;
+      }
+      setEmailOtpSent(true);
+      setEmailOtpMasked(res.maskedContact || personal.email);
+      setEmailOtpCooldownUntil(Date.now() + (res.cooldownSeconds || 60) * 1000);
+    } catch {
+      setEmailOtpError("We couldn't send the OTP. Please try again.");
+    } finally {
+      setEmailOtpLoading(false);
+    }
+  };
+
+  const verifyEmailOtp = async () => {
+    if (!/^\d{6}$/.test(emailOtp.trim())) {
+      setEmailOtpError('Please enter the 6-digit OTP sent to your email.');
+      return;
+    }
+    setEmailOtpLoading(true);
+    setEmailOtpError(null);
+    try {
+      const res = await api.verifyOtp({ identifier: personal.email.trim(), purpose: 'APPLICATION_EMAIL', otp: emailOtp.trim() });
+      if (!res.success || !res.verificationToken) {
+        setEmailOtpError(res.error || 'The OTP is incorrect or has expired.');
+        return;
+      }
+      setEmailOtpToken(res.verificationToken);
+      setEmailOtpError(null);
+    } catch {
+      setEmailOtpError('The OTP is incorrect or has expired.');
+    } finally {
+      setEmailOtpLoading(false);
+    }
+  };
+
   const handleDocumentUpload = (docType: string, title: string, file: File) => {
     setUploadError(null);
     const allowedTypes = ['application/pdf', 'image/jpeg', 'image/png'];
@@ -243,6 +304,11 @@ export const StepWizard: React.FC<StepWizardProps> = ({
       setUploadError(`Please upload required documents: ${missingDocs.join(', ')}.`);
       return;
     }
+    if (!emailOtpToken) {
+      setCurrentStep(5);
+      setStepError('Please verify your email address before submitting the application.');
+      return;
+    }
     setSubmitting(true);
     try {
       // 1. Run Automated Eligibility Engine
@@ -273,12 +339,14 @@ export const StepWizard: React.FC<StepWizardProps> = ({
         references,
         documents,
         eligibilityResult: elg,
+        emailVerificationToken: emailOtpToken,
       });
 
       setCreatedApplication(savedApp);
       setCurrentStep(6); // Success step
     } catch (e) {
       console.error(e);
+      setStepError(e instanceof Error ? e.message : 'We could not submit your application. Please try again.');
     } finally {
       setSubmitting(false);
     }
@@ -465,9 +533,53 @@ export const StepWizard: React.FC<StepWizardProps> = ({
                   type="email"
                   required
                   value={personal.email}
-                  onChange={(e) => setPersonal({ ...personal, email: e.target.value })}
+                  onChange={(e) => handleEmailChange(e.target.value)}
                   className="w-full px-3.5 py-2 rounded-xl border border-slate-300 text-sm"
                 />
+                <div className="mt-2 rounded-xl border border-blue-100 bg-blue-50/60 p-3 space-y-2">
+                  <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+                    <div className="text-xs">
+                      <span className="font-bold text-slate-900 block">Email OTP Verification *</span>
+                      <span className="text-slate-500">
+                        {emailOtpToken ? 'Email verified successfully.' : emailOtpSent ? `OTP sent to ${emailOtpMasked || personal.email}` : 'Verify this email before final submission.'}
+                      </span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={sendEmailOtp}
+                      disabled={emailOtpLoading || (emailOtpCooldownUntil > Date.now() && !emailOtpToken)}
+                      className="px-3 py-1.5 rounded-lg bg-slate-900 text-white text-[11px] font-bold disabled:opacity-50 cursor-pointer"
+                    >
+                      {emailOtpLoading ? 'Sending...' : emailOtpSent ? 'Resend OTP' : 'Send OTP'}
+                    </button>
+                  </div>
+                  {emailOtpSent && !emailOtpToken && (
+                    <div className="flex flex-col sm:flex-row gap-2">
+                      <input
+                        value={emailOtp}
+                        onChange={(e) => setEmailOtp(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                        inputMode="numeric"
+                        maxLength={6}
+                        placeholder="6-digit OTP"
+                        className="flex-1 px-3 py-2 rounded-lg border border-blue-100 bg-white text-sm font-bold tracking-widest"
+                      />
+                      <button
+                        type="button"
+                        onClick={verifyEmailOtp}
+                        disabled={emailOtpLoading}
+                        className="px-4 py-2 rounded-lg bg-blue-700 text-white text-xs font-bold disabled:opacity-50 cursor-pointer"
+                      >
+                        {emailOtpLoading ? 'Verifying...' : 'Verify OTP'}
+                      </button>
+                    </div>
+                  )}
+                  {emailOtpToken && (
+                    <div className="text-xs font-bold text-emerald-700 flex items-center gap-1">
+                      <Check className="w-3.5 h-3.5" /> Email verified
+                    </div>
+                  )}
+                  {emailOtpError && <div className="text-xs font-semibold text-rose-700">{emailOtpError}</div>}
+                </div>
               </div>
             </div>
 
@@ -631,6 +743,12 @@ export const StepWizard: React.FC<StepWizardProps> = ({
                 <span className="text-slate-500">PAN / Mobile</span>
                 <strong className="text-slate-900">{personal.panNumber} / {personal.mobile}</strong>
               </div>
+              <div className="flex justify-between pt-2 border-t border-slate-200">
+                <span className="text-slate-500">Email Verification</span>
+                <strong className={emailOtpToken ? 'text-emerald-700' : 'text-rose-700'}>
+                  {emailOtpToken ? 'Verified' : 'Pending'}
+                </strong>
+              </div>
             </div>
 
             <div className="space-y-3">
@@ -737,7 +855,7 @@ export const StepWizard: React.FC<StepWizardProps> = ({
             ) : (
               <button
                 onClick={handleFinalSubmit}
-                disabled={submitting || !termsAccepted || !creditCheckConsent}
+                disabled={submitting || !termsAccepted || !creditCheckConsent || !emailOtpToken}
                 className="px-6 py-2.5 rounded-xl bg-blue-700 hover:bg-blue-800 text-white text-sm font-bold flex items-center gap-1.5 cursor-pointer shadow-md disabled:opacity-50"
               >
                 {submitting ? 'Submitting Application...' : 'Submit Loan Application'}

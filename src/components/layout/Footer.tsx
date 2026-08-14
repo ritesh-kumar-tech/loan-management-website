@@ -7,7 +7,7 @@ interface FooterProps {
   setActiveTab: (tab: string) => void;
 }
 
-const loanLinks = ['Personal Loan', 'Business Growth Loan', 'Home Housing Loan', 'Education Loan', 'Vehicle & Auto Finance', 'Loan Against Property'];
+const loanLinks = ['Instant Personal Loan', 'Instant Short Term Loan', 'Business Loan', 'Educational Loan'];
 const quickLinks = [
   ['calculator', 'EMI Calculator'],
   ['track', 'Track Application Status'],
@@ -43,7 +43,7 @@ export const Footer: React.FC<FooterProps> = ({ settings, setActiveTab }) => {
             </div>
 
             <p className="text-[15px] text-slate-400 leading-relaxed max-w-xl">
-              {settings.companyName} provides transparent digital lending workflows for retail borrowers, salaried professionals, and MSMEs across India with secure application tracking and document verification.
+              {settings.companyName} provides online personal loan support as a fast, convenient, and affordable source of financing to help borrowers achieve their goals and overcome financial obstacles.
             </p>
 
             <div className="rounded-[20px] bg-white/[0.04] border border-white/10 p-5 space-y-3 text-sm">

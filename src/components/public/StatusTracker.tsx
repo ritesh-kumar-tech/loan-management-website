@@ -14,7 +14,7 @@ interface StatusTrackerProps {
 
 export const StatusTracker: React.FC<StatusTrackerProps> = ({ settings, onVerifiedCustomer }) => {
   const [identifierInput, setIdentifierInput] = useState('');
-  const [otpInput, setOtpInput] = useState('123456');
+  const [otpInput, setOtpInput] = useState('');
   const [stage, setStage] = useState<1 | 2>(1);
   const [loading, setLoading] = useState(false);
   const [lookupInfo, setLookupInfo] = useState<{ applicationId: string; maskedMobile: string; applicantName?: string; message?: string } | null>(null);
@@ -47,10 +47,10 @@ export const StatusTracker: React.FC<StatusTrackerProps> = ({ settings, onVerifi
         });
         setStage(2);
       } else {
-        setError(res.error || 'Application not found. Please check your Application ID or registered mobile number.');
+        setError(res.error || "We couldn't find an application with those details.");
       }
     } catch {
-      setError('Application not found. Please check your Application ID or registered mobile number.');
+      setError("We couldn't send the OTP. Please try again.");
     } finally {
       setLoading(false);
     }
@@ -80,10 +80,10 @@ export const StatusTracker: React.FC<StatusTrackerProps> = ({ settings, onVerifi
           onVerifiedCustomer(res.application, res.loanAccount);
         }
       } else {
-        setError(res.error || 'Invalid OTP. Please enter 123456.');
+        setError(res.error || 'The OTP is incorrect or has expired.');
       }
     } catch {
-      setError('Verification failed. Please enter the valid OTP 123456.');
+      setError('The OTP is incorrect or has expired.');
     } finally {
       setLoading(false);
     }
@@ -104,7 +104,7 @@ export const StatusTracker: React.FC<StatusTrackerProps> = ({ settings, onVerifi
           <Search className="w-3.5 h-3.5" /> Customer Loan Tracking Portal
         </div>
         <h1 className="text-3xl font-extrabold text-slate-900">Track Loan Application Status</h1>
-        <p className="mt-2 text-sm text-slate-600">Enter your Application ID or registered 10-digit mobile number to verify your identity and view live application status.</p>
+        <p className="mt-2 text-sm text-slate-600">Enter your Application ID, registered email, or registered mobile number to receive an email OTP and view your application status.</p>
       </div>
 
       <div className="bg-white p-6 sm:p-8 rounded-3xl border border-slate-200 shadow-md mb-8">
@@ -113,13 +113,13 @@ export const StatusTracker: React.FC<StatusTrackerProps> = ({ settings, onVerifi
           <form onSubmit={handleStage1Lookup} className="space-y-4">
             <div>
               <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-2">
-                Application ID or Registered Mobile Number *
+                Application ID, Registered Email, or Mobile Number *
               </label>
               <div className="relative">
                 <input
                   type="text"
                   required
-                  placeholder="e.g. LN-2026-000101 or 9876543210"
+                  placeholder="e.g. LN-2026-000101, name@email.com, or 9876543210"
                   value={identifierInput}
                   onChange={(e) => setIdentifierInput(e.target.value)}
                   className="w-full pl-4 pr-10 py-3.5 rounded-xl border border-slate-300 focus:ring-2 focus:ring-slate-900 focus:outline-hidden text-sm font-semibold text-slate-900"
@@ -146,7 +146,7 @@ export const StatusTracker: React.FC<StatusTrackerProps> = ({ settings, onVerifi
                 <strong className="font-bold text-sky-950 block text-sm mb-0.5">
                   Application Found: {lookupInfo?.applicantName || lookupInfo?.applicationId}
                 </strong>
-                <p>An OTP has been dispatched to registered mobile number <strong>{lookupInfo?.maskedMobile}</strong>. Enter OTP below to access your loan status portal.</p>
+                <p>A 6-digit OTP has been sent to the registered email <strong>{lookupInfo?.maskedMobile}</strong>. Enter it below to access your loan status portal.</p>
               </div>
             </div>
 
@@ -160,14 +160,14 @@ export const StatusTracker: React.FC<StatusTrackerProps> = ({ settings, onVerifi
                   required
                   maxLength={6}
                   inputMode="numeric"
-                  placeholder="Enter 123456"
+                  placeholder="Enter OTP"
                   value={otpInput}
                   onChange={(e) => setOtpInput(e.target.value)}
                   className="w-full pl-4 pr-10 py-3.5 rounded-xl border border-slate-300 focus:ring-2 focus:ring-slate-900 focus:outline-hidden text-lg font-bold tracking-widest text-slate-900 font-mono"
                 />
                 <KeyRound className="w-5 h-5 text-slate-400 absolute right-3.5 top-3.5 pointer-events-none" />
               </div>
-              <span className="text-[11px] text-slate-500 mt-1 block">For demonstration testing, use default security OTP: <strong className="text-slate-900">123456</strong></span>
+              <span className="text-[11px] text-slate-500 mt-1 block">The OTP expires in 5 minutes and can be used only once.</span>
             </div>
 
             <div className="flex flex-col sm:flex-row gap-3 pt-2">
