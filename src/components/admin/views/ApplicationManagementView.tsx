@@ -27,8 +27,9 @@ import { LoanApplication, ApplicationStatus } from '../../../types';
 import { formatINR, formatDate, calculateEmi, calculateFOIR } from '../../../utils/calculator';
 import { 
   generateSanctionLetter, 
+  generateGeneralLoanLetter,
   generateLoanAgreement, 
-  generateRepaymentSchedulePDF, 
+  generateApplicationEmiSchedulePDF,
   generateProvisionalEligibilityLetter 
 } from '../../../utils/pdfGenerator';
 import { StatusBadge } from '../../shared/StatusBadge';
@@ -302,29 +303,35 @@ export const ApplicationManagementView: React.FC<ApplicationManagementViewProps>
             </div>
 
             {/* Document PDF Generation Quick Tools */}
-            <div className="bg-slate-50 p-3 rounded-2xl border border-slate-200/80 flex flex-wrap items-center justify-between gap-2 text-xs">
-              <span className="font-bold text-slate-700 flex items-center gap-1.5">
-                <Printer className="w-4 h-4 text-emerald-600" /> Generate Official Letters:
-              </span>
-              <div className="flex flex-wrap items-center gap-2">
-                <button
+            <div className="bg-slate-50 p-4 rounded-2xl border border-slate-200/80 space-y-3 text-xs">
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1">
+                <span className="font-extrabold text-slate-900 flex items-center gap-1.5">
+                  <Printer className="w-4 h-4 text-emerald-600" /> Official Loan PDF Documents
+                </span>
+                <span className="text-[11px] text-slate-500">Prepared from current application data</span>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-2">
+                <PdfAction
+                  title="General Loan Letter"
+                  description="Customer summary and general loan processing terms."
+                  onClick={() => generateGeneralLoanLetter(selectedApp, settings)}
+                />
+                <PdfAction
+                  title="Sanction Letter"
+                  description="Approved amount, EMI, conditions and validity."
                   onClick={() => generateSanctionLetter(selectedApp, settings)}
-                  className="px-3 py-1.5 rounded-xl bg-white hover:bg-slate-100 text-slate-800 font-bold border border-slate-200 shadow-2xs flex items-center gap-1 cursor-pointer"
-                >
-                  Sanction Letter PDF
-                </button>
-                <button
+                />
+                <PdfAction
+                  title="Loan Agreement"
+                  description="Borrower undertaking and repayment terms."
                   onClick={() => generateLoanAgreement(selectedApp, settings)}
-                  className="px-3 py-1.5 rounded-xl bg-white hover:bg-slate-100 text-slate-800 font-bold border border-slate-200 shadow-2xs flex items-center gap-1 cursor-pointer"
-                >
-                  Loan Agreement PDF
-                </button>
-                <button
-                  onClick={() => generateRepaymentSchedulePDF(selectedApp, settings)}
-                  className="px-3 py-1.5 rounded-xl bg-white hover:bg-slate-100 text-slate-800 font-bold border border-slate-200 shadow-2xs flex items-center gap-1 cursor-pointer"
-                >
-                  EMI Schedule PDF
-                </button>
+                />
+                <PdfAction
+                  title="EMI Schedule"
+                  description="Month-wise indicative repayment schedule."
+                  onClick={() => generateApplicationEmiSchedulePDF(selectedApp, settings)}
+                />
               </div>
             </div>
 
@@ -699,5 +706,18 @@ export const ApplicationManagementView: React.FC<ApplicationManagementViewProps>
     </div>
   );
 };
+
+const PdfAction: React.FC<{ title: string; description: string; onClick: () => void }> = ({ title, description, onClick }) => (
+  <button
+    onClick={onClick}
+    className="group rounded-xl bg-white hover:bg-blue-50 border border-slate-200 hover:border-blue-200 p-3 text-left shadow-2xs transition-all cursor-pointer"
+  >
+    <span className="flex items-center justify-between gap-2">
+      <span className="font-extrabold text-slate-900 text-xs">{title}</span>
+      <Download className="w-4 h-4 text-slate-400 group-hover:text-blue-700 shrink-0" />
+    </span>
+    <span className="block text-[11px] text-slate-500 mt-1 leading-snug">{description}</span>
+  </button>
+);
 
 

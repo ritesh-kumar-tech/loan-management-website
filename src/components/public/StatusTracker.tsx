@@ -167,7 +167,7 @@ export const StatusTracker: React.FC<StatusTrackerProps> = ({ settings, onVerifi
                 />
                 <KeyRound className="w-5 h-5 text-slate-400 absolute right-3.5 top-3.5 pointer-events-none" />
               </div>
-              <span className="text-[11px] text-slate-500 mt-1 block">The OTP expires in 5 minutes and can be used only once.</span>
+              <span className="text-[11px] text-slate-500 mt-1 block">The OTP expires in 5 minutes and can be used only once. Demo OTP: <strong>123456</strong>.</span>
             </div>
 
             <div className="flex flex-col sm:flex-row gap-3 pt-2">

@@ -1,6 +1,53 @@
 import { jsPDF } from 'jspdf';
 import { LoanApplication, LoanAccount, PaymentSubmission, Receipt, CompanySettings } from '../types';
-import { formatINR, formatDate } from './calculator';
+import { calculateEmi, formatINR, formatDate } from './calculator';
+
+const formatPDF_INR = (amount: number) => formatINR(amount || 0).replace('₹', 'Rs. ').replace('â‚¹', 'Rs. ');
+
+function maskAccount(accountNumber?: string) {
+  const last4 = String(accountNumber || '').replace(/\D/g, '').slice(-4);
+  return last4 ? `XXXXXX${last4}` : 'XXXXXX';
+}
+
+function drawDocumentHero(doc: jsPDF, title: string, subtitle: string, y: number) {
+  doc.setFillColor(239, 246, 255);
+  doc.roundedRect(14, y - 4, 182, 18, 2, 2, 'F');
+  doc.setDrawColor(191, 219, 254);
+  doc.roundedRect(14, y - 4, 182, 18, 2, 2, 'S');
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(13);
+  doc.setTextColor(15, 23, 42);
+  doc.text(title, 18, y + 3);
+  doc.setFontSize(8);
+  doc.setFont('helvetica', 'normal');
+  doc.setTextColor(37, 99, 235);
+  doc.text(subtitle, 18, y + 9);
+}
+
+function drawKeyValueRows(doc: jsPDF, rows: [string, string][], x: number, y: number, width: number) {
+  const rowHeight = 8;
+  doc.setFillColor(248, 250, 252);
+  doc.rect(x, y, width, rows.length * rowHeight, 'F');
+  doc.setDrawColor(203, 213, 225);
+  doc.rect(x, y, width, rows.length * rowHeight, 'S');
+
+  rows.forEach(([label, value], idx) => {
+    const rowTop = y + idx * rowHeight;
+    if (idx % 2 === 1) {
+      doc.setFillColor(255, 255, 255);
+      doc.rect(x, rowTop, width, rowHeight, 'F');
+    }
+    doc.setDrawColor(226, 232, 240);
+    doc.line(x, rowTop + rowHeight, x + width, rowTop + rowHeight);
+    doc.setFontSize(8.5);
+    doc.setFont('helvetica', 'bold');
+    doc.setTextColor(51, 65, 85);
+    doc.text(label, x + 4, rowTop + 5.5);
+    doc.setFont('helvetica', 'normal');
+    doc.setTextColor(15, 23, 42);
+    doc.text(value, x + width * 0.48, rowTop + 5.5, { maxWidth: width * 0.48 });
+  });
+}
 
 function drawHeader(doc: jsPDF, settings: CompanySettings, docTitle: string) {
   // Primary top bar
@@ -316,37 +363,222 @@ export function generateSanctionLetter(app: LoanApplication, settings: CompanySe
   doc.save(`DhaniFinance_Sanction_${app.id}.pdf`);
 }
 
-// 4. Loan Agreement Document
+// 4. General Loan Section Letter
+export function generateGeneralLoanLetter(app: LoanApplication, settings: CompanySettings) {
+  const doc = new jsPDF();
+  drawHeader(doc, settings, 'General Loan Letter');
+
+  let y = 45;
+  const amount = app.approvedAmount || app.requestedAmount;
+  const rate = app.approvedRate || app.eligibilityResult?.recommendedInterestRate || 12.5;
+  const tenure = app.approvedTenureMonths || app.requestedTenureMonths;
+  const emi = app.approvedEmi || calculateEmi(amount, rate, tenure, 1.5).monthlyEmi;
+
+  drawDocumentHero(
+    doc,
+    'GENERAL LOAN APPLICATION LETTER',
+    'Customer loan summary prepared for application review and customer records',
+    y
+  );
+
+  y += 24;
+  doc.setFontSize(9);
+  doc.setFont('helvetica', 'normal');
+  doc.setTextColor(51, 65, 85);
+  doc.text(`Reference No: GEN/${app.id}/2026`, 14, y);
+  doc.text(`Date: ${formatDate(new Date().toISOString())}`, 196, y, { align: 'right' });
+
+  y += 10;
+  doc.setFont('helvetica', 'bold');
+  doc.setTextColor(15, 23, 42);
+  doc.text('To Whom It May Concern,', 14, y);
+  y += 7;
+  doc.setFont('helvetica', 'normal');
+  const body = `This is to record that ${app.personalInfo.fullName} has submitted a loan application with ${settings.companyName}. The details below are based on information provided by the applicant and are subject to internal checks, document verification, eligibility review, applicable charges, and final sanction approval.`;
+  doc.text(doc.splitTextToSize(body, 182), 14, y);
+
+  y += 20;
+  doc.setFont('helvetica', 'bold');
+  doc.text('Applicant & Loan Summary', 14, y);
+  y += 5;
+  drawKeyValueRows(doc, [
+    ['Application ID', app.id],
+    ['Applicant Name', app.personalInfo.fullName],
+    ['Registered Email', app.personalInfo.email],
+    ['Registered Mobile', app.personalInfo.mobile],
+    ['Loan Product', app.productTitle],
+    ['Loan Purpose', app.purpose || 'As declared in application'],
+    ['Requested / Approved Amount', formatPDF_INR(amount)],
+    ['Tenure', `${tenure} months`],
+    ['Indicative EMI', formatPDF_INR(emi)],
+    ['Application Status', app.status.replace(/_/g, ' ')],
+  ], 14, y, 182);
+
+  y += 88;
+  doc.setFont('helvetica', 'bold');
+  doc.text('General Terms for Loan Processing', 14, y);
+  y += 6;
+  doc.setFont('helvetica', 'normal');
+  doc.setTextColor(51, 65, 85);
+  [
+    'Loan approval is subject to complete KYC, income, bank-account and document verification.',
+    'Final interest rate, EMI, tenure, processing fee and other charges are confirmed only in the official sanction letter.',
+    'Disbursement, if approved, will be made only to the verified bank account of the primary borrower.',
+    'The borrower should not make any cash payment to any person for guaranteed approval or release of funds.',
+    'The applicant may track status using the application ID and OTP verification on the official website.',
+  ].forEach((line, idx) => {
+    doc.text(`${idx + 1}. ${line}`, 18, y, { maxWidth: 174 });
+    y += 6;
+  });
+
+  y += 4;
+  doc.setFillColor(240, 253, 244);
+  doc.setDrawColor(187, 247, 208);
+  doc.roundedRect(14, y, 182, 18, 2, 2, 'FD');
+  doc.setFont('helvetica', 'bold');
+  doc.setTextColor(22, 101, 52);
+  doc.text('Responsible Lending Note', 18, y + 7);
+  doc.setFont('helvetica', 'normal');
+  doc.text('This letter is a general application summary and is not a final disbursement commitment.', 18, y + 13);
+
+  drawSignatures(doc, settings, 220);
+  drawFooter(doc, settings, `GEN-${app.id}`);
+  doc.save(`DhaniFinance_General_Loan_Letter_${app.id}.pdf`);
+}
+
+// 5. Application EMI Schedule Preview
+export function generateApplicationEmiSchedulePDF(app: LoanApplication, settings: CompanySettings) {
+  const amount = app.approvedAmount || app.requestedAmount;
+  const rate = app.approvedRate || app.eligibilityResult?.recommendedInterestRate || 12.5;
+  const tenure = app.approvedTenureMonths || app.requestedTenureMonths;
+  const calc = calculateEmi(amount, rate, tenure, 1.5);
+  const doc = new jsPDF();
+  drawHeader(doc, settings, 'EMI Schedule Preview');
+
+  let y = 45;
+  drawDocumentHero(
+    doc,
+    'EMI REPAYMENT SCHEDULE PREVIEW',
+    'Indicative schedule generated from current application or approved terms',
+    y
+  );
+  y += 24;
+
+  drawKeyValueRows(doc, [
+    ['Application ID', app.id],
+    ['Applicant Name', app.personalInfo.fullName],
+    ['Loan Product', app.productTitle],
+    ['Principal Amount', formatPDF_INR(amount)],
+    ['Interest Rate', `${rate}% p.a.`],
+    ['Tenure', `${tenure} months`],
+    ['Monthly EMI', formatPDF_INR(calc.monthlyEmi)],
+    ['Total Payable', formatPDF_INR(calc.totalPayment)],
+  ], 14, y, 182);
+
+  y += 74;
+  doc.setFont('helvetica', 'bold');
+  doc.setTextColor(15, 23, 42);
+  doc.text('Month-wise EMI Schedule', 14, y);
+  y += 6;
+
+  const drawTableHeader = () => {
+    doc.setFillColor(11, 25, 44);
+    doc.rect(14, y, 182, 9, 'F');
+    doc.setFontSize(8);
+    doc.setFont('helvetica', 'bold');
+    doc.setTextColor(255, 255, 255);
+    doc.text('No.', 18, y + 6);
+    doc.text('Opening', 54, y + 6, { align: 'right' });
+    doc.text('Principal', 88, y + 6, { align: 'right' });
+    doc.text('Interest', 122, y + 6, { align: 'right' });
+    doc.text('EMI', 154, y + 6, { align: 'right' });
+    doc.text('Closing', 192, y + 6, { align: 'right' });
+    y += 9;
+  };
+
+  drawTableHeader();
+  doc.setFontSize(8);
+  calc.schedule.forEach((row, idx) => {
+    if (y > 262) {
+      doc.addPage();
+      drawHeader(doc, settings, 'EMI Schedule Preview');
+      y = 45;
+      drawTableHeader();
+    }
+    if (idx % 2 === 0) {
+      doc.setFillColor(248, 250, 252);
+      doc.rect(14, y, 182, 8, 'F');
+    }
+    doc.setTextColor(51, 65, 85);
+    doc.setFont('helvetica', 'normal');
+    doc.text(String(row.month), 18, y + 5.5);
+    doc.text(formatPDF_INR(row.openingPrincipal), 54, y + 5.5, { align: 'right' });
+    doc.text(formatPDF_INR(row.principalPayment), 88, y + 5.5, { align: 'right' });
+    doc.text(formatPDF_INR(row.interestPayment), 122, y + 5.5, { align: 'right' });
+    doc.text(formatPDF_INR(row.emi), 154, y + 5.5, { align: 'right' });
+    doc.text(formatPDF_INR(row.closingPrincipal), 192, y + 5.5, { align: 'right' });
+    y += 8;
+  });
+
+  drawFooter(doc, settings, `EMI-${app.id}`);
+  doc.save(`DhaniFinance_EMI_Schedule_${app.id}.pdf`);
+}
+
+// 6. Loan Agreement Document
 export function generateLoanAgreement(app: LoanApplication, settings: CompanySettings) {
   const doc = new jsPDF();
   drawHeader(doc, settings, 'Loan Agreement');
 
   let y = 45;
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(11);
-  doc.text('DEMAND LOAN AGREEMENT AND REPAYMENT UNDERTAKING', 14, y);
+  const amount = app.approvedAmount || app.requestedAmount;
+  const rate = app.approvedRate || 12.5;
+  const tenure = app.approvedTenureMonths || app.requestedTenureMonths;
+  const emi = app.approvedEmi || calculateEmi(amount, rate, tenure, 1.5).monthlyEmi;
+  drawDocumentHero(
+    doc,
+    'LOAN AGREEMENT & REPAYMENT UNDERTAKING',
+    'General agreement draft for customer acceptance and lender records',
+    y
+  );
 
-  y += 8;
+  y += 22;
   doc.setFontSize(8.5);
   doc.setFont('helvetica', 'normal');
-  doc.text(`THIS LOAN AGREEMENT is executed on this ${formatDate(new Date().toISOString())} at ${settings.registeredAddress}, between Dhani Finance (Lender) and ${app.personalInfo.fullName} (Borrower), PAN: ${app.personalInfo.panNumber}.`, 14, y, { maxWidth: 180 });
+  doc.setTextColor(51, 65, 85);
+  doc.text(`This agreement draft is executed on ${formatDate(new Date().toISOString())} between ${settings.companyName} (Lender) and ${app.personalInfo.fullName} (Borrower), PAN ${app.personalInfo.panNumber}.`, 14, y, { maxWidth: 180 });
 
-  y += 12;
+  y += 14;
+  drawKeyValueRows(doc, [
+    ['Application ID', app.id],
+    ['Borrower Name', app.personalInfo.fullName],
+    ['Borrower Address', `${app.personalInfo.currentAddress}, ${app.personalInfo.city}, ${app.personalInfo.state}`],
+    ['Bank Account', `${app.financialInfo.bankName} - ${maskAccount(app.financialInfo.accountNumber)}`],
+    ['Loan Amount', formatPDF_INR(amount)],
+    ['Interest Rate', `${rate}% p.a. reducing balance`],
+    ['Tenure', `${tenure} months`],
+    ['Monthly EMI', formatPDF_INR(emi)],
+  ], 14, y, 182);
+
+  y += 74;
   doc.setFont('helvetica', 'bold');
-  doc.text('TERMS AND CONDITIONS OF LOAN FACILITY:', 14, y); y += 5;
+  doc.setTextColor(15, 23, 42);
+  doc.text('Terms and Conditions of Loan Facility', 14, y); y += 6;
   doc.setFont('helvetica', 'normal');
+  doc.setTextColor(51, 65, 85);
 
   const clauses = [
-    `1. FACILITY AMOUNT: The Lender agrees to disburse a sum of ${formatINR(app.approvedAmount || app.requestedAmount)} under loan account ${app.id}.`,
-    `2. REPAYMENT & INTEREST: The Borrower undertakes to repay the principal together with interest at the rate of ${app.approvedRate || 12.5}% p.a. in ${app.approvedTenureMonths || app.requestedTenureMonths} monthly installments of ${formatINR(app.approvedEmi || 0)}.`,
-    `3. DEFAULT & PENALTY: Late payments shall attract default interest penalty charges of 2% per month on the overdue installment amount.`,
-    `4. RECOVERIES & LEGAL JURISDICTION: Disputes arising out of this agreement shall be subject to exclusive jurisdiction of courts located in the Lender registered city.`,
-    `5. E-SIGNATURE CONSENT: The Borrower acknowledges electronic verification of Aadhaar/PAN as valid consent and signature under the Information Technology Act.`,
+    `Facility Amount: The lender may disburse ${formatPDF_INR(amount)} subject to final verification and execution of all required documents.`,
+    `Repayment: The borrower undertakes to repay the loan in ${tenure} monthly installments. The indicative EMI is ${formatPDF_INR(emi)}.`,
+    `Interest: Interest will be charged at ${rate}% p.a. on a reducing balance basis unless otherwise stated in the sanction letter.`,
+    'Use of Funds: The borrower confirms that funds will be used only for the declared loan purpose and lawful activities.',
+    'Default: Delayed or missed payments may attract applicable charges and recovery action as permitted by law.',
+    'Fair Recovery: The lender will follow responsible lending and non-coercive recovery practices.',
+    'Declarations: The borrower confirms that all submitted information and documents are true and complete.',
   ];
 
-  clauses.forEach(cl => {
-    doc.text(cl, 14, y, { maxWidth: 180 });
-    y += 10;
+  clauses.forEach((cl, idx) => {
+    doc.text(`${idx + 1}. ${cl}`, 18, y, { maxWidth: 174 });
+    y += 8;
   });
 
   drawSignatures(doc, settings, 210);
