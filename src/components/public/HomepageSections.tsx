@@ -290,7 +290,7 @@ export const TestimonialStatsCta: React.FC<{
             <div>
               <span className="df-eyebrow">Customer Feedback</span>
               <h2 className="df-heading mt-4">Testimonials</h2>
-              <p className="df-copy mt-3 max-w-2xl">Admin-approved placeholders are shown until real customer reviews are published.</p>
+              <p className="df-copy mt-3 max-w-2xl">Customer feedback from approved loan applicants.</p>
             </div>
             <CarouselControls count={testimonials.length} index={index} setIndex={setIndex} label="testimonials" userPaused={userPaused} setUserPaused={setUserPaused} />
           </div>

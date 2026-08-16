@@ -109,6 +109,102 @@ function drawSignatures(doc: jsPDF, settings: CompanySettings, yPos: number) {
   doc.text(`${settings.authorizedSignatoryTitle}`, 140, yPos + 31);
 }
 
+function drawDhaniLogo(doc: jsPDF, x: number, y: number, scale = 1) {
+  const blue: [number, number, number] = [0, 101, 176];
+  const orange: [number, number, number] = [245, 139, 28];
+  const green: [number, number, number] = [36, 196, 37];
+
+  doc.setFillColor(...blue);
+  doc.circle(x + 5 * scale, y + 14 * scale, 5.2 * scale, 'F');
+  doc.setFillColor(...blue);
+  doc.triangle(x + 2.3 * scale, y + 8 * scale, x + 7.7 * scale, y + 8 * scale, x + 5 * scale, y + 4.5 * scale, 'F');
+  doc.setDrawColor(...blue);
+  doc.setLineWidth(1.1 * scale);
+  doc.line(x + 2.1 * scale, y + 7.7 * scale, x + 7.9 * scale, y + 7.7 * scale);
+
+  doc.setFont('helvetica', 'bolditalic');
+  doc.setFontSize(26 * scale);
+  doc.setTextColor(...blue);
+  doc.text('dhani', x + 12 * scale, y + 18 * scale);
+
+  doc.setDrawColor(...orange);
+  doc.setLineWidth(1.1 * scale);
+  doc.lines(
+    [
+      [13 * scale, -3.5 * scale],
+      [23 * scale, -4.5 * scale],
+      [34 * scale, -1.5 * scale],
+    ],
+    x + 14 * scale,
+    y + 1.5 * scale
+  );
+  doc.setFillColor(...orange);
+  doc.triangle(x + 47 * scale, y - 4 * scale, x + 43 * scale, y - 1 * scale, x + 45 * scale, y + 2 * scale, 'F');
+
+  doc.setFont('helvetica', 'bolditalic');
+  doc.setFontSize(12 * scale);
+  doc.setTextColor(...green);
+  doc.text('Dhani Finances', x, y - 1 * scale);
+}
+
+function drawBarcode(doc: jsPDF, x: number, y: number, value = '', height = 16, scale = 1) {
+  const seed = value || 'DHANI-FINANCES';
+  const bars = Array.from({ length: 38 }, (_, idx) => {
+    const code = seed.charCodeAt(idx % seed.length) + idx * 17;
+    return (code % 3) + 1;
+  });
+  let cursor = x;
+  doc.setFillColor(0, 0, 0);
+  bars.forEach((width, idx) => {
+    if (idx % 2 === 0) doc.rect(cursor, y, width * 0.55 * scale, height, 'F');
+    cursor += width * 0.72 * scale;
+  });
+}
+
+function drawVerificationQr(doc: jsPDF, x: number, y: number, cell = 2.4) {
+  const pattern = [
+    '111111100101111',
+    '100000101001001',
+    '101110100111101',
+    '101110101010001',
+    '101110101101101',
+    '100000100000101',
+    '111111101010111',
+    '000000001011000',
+    '110101111001101',
+    '011001000111010',
+    '101111101100111',
+    '001010011010001',
+    '111111101111101',
+    '100000101000101',
+    '111111101011111',
+  ];
+  doc.setFillColor(0, 0, 0);
+  pattern.forEach((row, rowIdx) => {
+    row.split('').forEach((bit, colIdx) => {
+      if (bit === '1') doc.rect(x + colIdx * cell, y + rowIdx * cell, cell, cell, 'F');
+    });
+  });
+}
+
+async function addQrImageOrFallback(doc: jsPDF, data: string, x: number, y: number, size: number) {
+  const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=360x360&data=${encodeURIComponent(data)}`;
+  try {
+    const response = await fetch(qrUrl);
+    if (!response.ok) throw new Error('QR image request failed');
+    const blob = await response.blob();
+    const dataUrl = await new Promise<string>((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(String(reader.result));
+      reader.onerror = reject;
+      reader.readAsDataURL(blob);
+    });
+    doc.addImage(dataUrl, 'PNG', x, y, size, size);
+  } catch {
+    drawVerificationQr(doc, x, y, size / 15);
+  }
+}
+
 // 1. Application Acknowledgement
 export function generateApplicationAcknowledgement(app: LoanApplication, settings: CompanySettings) {
   const doc = new jsPDF();
@@ -234,131 +330,171 @@ export function generateProvisionalEligibilityLetter(app: LoanApplication, setti
 }
 
 // 3. Official Loan Approval / Sanction Letter
-export function generateSanctionLetter(app: LoanApplication, settings: CompanySettings) {
+export async function generateSanctionLetter(app: LoanApplication, settings: CompanySettings) {
   const doc = new jsPDF();
-  drawHeader(doc, settings, 'Loan Sanction Letter');
-
-  let y = 45;
+  const pageWidth = 210;
+  const margin = 11;
+  const approvalDateIso = app.approvalDate || new Date().toISOString();
+  const approvalDate = formatDate(approvalDateIso);
   const sanctionDate = formatDate(app.approvalDate || new Date().toISOString());
   const sanctionedAmount = app.approvedAmount || app.requestedAmount;
   const approvedRate = app.approvedRate || 12.5;
   const approvedTenure = app.approvedTenureMonths || app.requestedTenureMonths;
-  const approvedEmi = app.approvedEmi || 0;
+  const approvedEmi = app.approvedEmi || calculateEmi(sanctionedAmount, approvedRate, approvedTenure, 1.5).monthlyEmi;
+  const processingFee = app.processingFee || Math.round((sanctionedAmount * 1.5) / 100);
+  const yearText = `${Math.floor(approvedTenure / 12)} Years, ${approvedTenure % 12} Months`;
+  const borrowerAddress = [
+    app.personalInfo.currentAddress,
+    app.personalInfo.city,
+    app.personalInfo.state,
+    app.personalInfo.pincode,
+  ].filter(Boolean).join(', ');
 
-  doc.setFillColor(239, 246, 255);
-  doc.roundedRect(14, y - 4, 182, 18, 2, 2, 'F');
-  doc.setDrawColor(191, 219, 254);
-  doc.roundedRect(14, y - 4, 182, 18, 2, 2, 'S');
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(13);
-  doc.setTextColor(15, 23, 42);
-  doc.text('OFFICIAL LOAN SANCTION LETTER', 18, y + 3);
-  doc.setFontSize(8);
-  doc.setTextColor(37, 99, 235);
-  doc.text('Subject to final verification, agreement execution and lender policy checks', 18, y + 9);
-
-  y += 22;
-  doc.setFontSize(9);
-  doc.setFont('helvetica', 'normal');
-  doc.setTextColor(51, 65, 85);
-  doc.text(`Sanction Reference No: SANC/${app.id}/2026`, 14, y);
-  doc.text(`Date of Issue: ${sanctionDate}`, 196, y, { align: 'right' });
-
-  y += 10;
-  doc.setFont('helvetica', 'bold');
-  doc.text('Borrower Details', 14, y);
-  y += 4;
-  doc.setFillColor(248, 250, 252);
-  doc.rect(14, y, 182, 26, 'F');
-  doc.setDrawColor(226, 232, 240);
-  doc.rect(14, y, 182, 26, 'S');
-
-  doc.setFont('helvetica', 'bold');
-  doc.text(app.personalInfo.fullName.toUpperCase(), 18, y + 7);
-  doc.setFont('helvetica', 'normal');
-  doc.text(`${app.personalInfo.currentAddress}, ${app.personalInfo.city}, ${app.personalInfo.state} - ${app.personalInfo.pincode}`, 18, y + 13, { maxWidth: 112 });
-  doc.text(`PAN: ${app.personalInfo.panNumber}`, 140, y + 7);
-  doc.text(`Mobile: ${app.personalInfo.mobile}`, 140, y + 13);
-  doc.text(`Application ID: ${app.id}`, 140, y + 19);
-
-  y += 36;
-  doc.text('Dear Sir/Madam,', 14, y);
-  y += 6;
-  const intro = `We are pleased to inform you that your application for ${app.productTitle} has been approved in principle by ${settings.companyName}. The sanction is issued on the basis of details submitted by you and remains subject to completion of documentation, verification and final disbursement checks.`;
-  doc.text(doc.splitTextToSize(intro, 182), 14, y);
-
-  y += 18;
-  // Sanction Terms Table
-  const terms = [
-    ['Loan Product Category', app.productTitle],
-    ['Sanctioned Amount', formatINR(sanctionedAmount)],
-    ['Rate of Interest', `${approvedRate}% p.a. reducing balance`],
-    ['Loan Tenure', `${approvedTenure} months`],
-    ['Monthly EMI', approvedEmi ? formatINR(approvedEmi) : 'To be confirmed before disbursement'],
-    ['Processing Fee (Non-Refundable)', formatINR(app.processingFee || 0)],
-    ['Disbursement Account', `${app.financialInfo.bankName} - A/C ${app.financialInfo.accountNumber}`],
-    ['Sanction Validity', '15 days from date of issue'],
-  ];
-
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(10);
-  doc.setTextColor(15, 23, 42);
-  doc.text('Sanctioned Loan Terms', 14, y);
-  y += 5;
-  const rowHeight = 8;
-  const tableHeight = rowHeight * terms.length;
-  doc.setFillColor(248, 250, 252);
-  doc.rect(14, y, 182, tableHeight, 'F');
-  doc.setDrawColor(203, 213, 225);
-  doc.rect(14, y, 182, tableHeight, 'S');
-
-  terms.forEach(([label, val], idx) => {
-    const rowTop = y + idx * rowHeight;
-    if (idx % 2 === 1) {
-      doc.setFillColor(255, 255, 255);
-      doc.rect(14, rowTop, 182, rowHeight, 'F');
-    }
-    doc.setDrawColor(226, 232, 240);
-    doc.line(14, rowTop + rowHeight, 196, rowTop + rowHeight);
-    const rowY = rowTop + 5.5;
+  const money = (amount: number) => `INR ${Math.round(amount || 0).toLocaleString('en-IN')}/-`;
+  const writeWrapped = (text: string, x: number, y: number, maxWidth: number, lineHeight = 5.7) => {
+    const lines = doc.splitTextToSize(text, maxWidth);
+    doc.text(lines, x, y);
+    return y + lines.length * lineHeight;
+  };
+  const field = (label: string, value: string, x: number, y: number, valueX = 48) => {
     doc.setFont('helvetica', 'bold');
-    doc.setTextColor(51, 65, 85);
-    doc.text(label, 18, rowY);
-    doc.setFont('helvetica', 'normal');
-    doc.setTextColor(15, 23, 42);
-    doc.text(String(val), 100, rowY, { maxWidth: 90 });
-  });
+    doc.setTextColor(0, 0, 0);
+    doc.text(`${label} -`, x, y);
+    doc.text(value || '-', valueX, y);
+  };
+  const origin = typeof window !== 'undefined' ? window.location.origin : settings.companyName;
+  const payeeName = settings.collectionAccountHolderName || settings.upiAccountName || settings.companyName;
+  const payeeAccount = settings.collectionAccountNumber || 'Set by admin';
+  const payeeIfsc = settings.collectionIfscCode || 'Set by admin';
+  const payeeBank = settings.collectionBankName || 'Official collection bank';
 
-  y += tableHeight + 12;
+  doc.setFillColor(255, 255, 255);
+  doc.rect(0, 0, pageWidth, 297, 'F');
+
+  // Top letterhead
+  drawDhaniLogo(doc, margin + 1, 11, 1.28);
+
   doc.setFont('helvetica', 'bold');
-  doc.setTextColor(15, 23, 42);
-  doc.text('Key Pre-Disbursement Conditions', 14, y); y += 6;
+  doc.setFontSize(10.5);
+  doc.setTextColor(8, 20, 38);
+  doc.text(settings.registeredAddress || settings.branchAddress, pageWidth - margin, 12, { align: 'right', maxWidth: 112 });
   doc.setFont('helvetica', 'normal');
-  doc.setTextColor(51, 65, 85);
-  const conditions = [
-    'Execution of the loan agreement, repayment schedule and all required declarations.',
-    'Successful verification of KYC documents, bank account details and borrower eligibility.',
-    'Payment of applicable processing fee and charges through approved digital payment modes.',
-    'Final lender approval before disbursement into the verified borrower bank account.',
+  doc.setFontSize(9.2);
+  doc.text(`${settings.supportEmail}  |  ${settings.supportPhone}`, pageWidth - margin, 31, { align: 'right' });
+
+  doc.setFillColor(37, 99, 235);
+  doc.rect(0, 38, pageWidth, 12, 'F');
+
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(17);
+  doc.setTextColor(0, 0, 0);
+  doc.text('Loan Approval Letter', pageWidth / 2, 62, { align: 'center' });
+  drawBarcode(doc, 150, 54, app.id, 19, 1.12);
+
+  let y = 75;
+  const leftX = margin + 4;
+  doc.setFontSize(11.2);
+  doc.setFont('helvetica', 'bold');
+  doc.setTextColor(0, 0, 0);
+  field('Name', app.personalInfo.fullName.toUpperCase(), leftX, y, 58); y += 6.2;
+  field('Application no', app.id, leftX, y, 58); y += 6.2;
+  field('Loan Amount', money(sanctionedAmount), leftX, y, 58); y += 6.2;
+  field('Period', yearText, leftX, y, 58); y += 6.2;
+  field('Monthly EMI', money(approvedEmi), leftX, y, 58); y += 6.2;
+  field('Loan Type', app.productTitle, leftX, y, 58); y += 8;
+
+  doc.setFontSize(10.9);
+  doc.text('Respected Sir/Madam,', leftX, y);
+  y += 6;
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(10.3);
+  doc.setTextColor(17, 24, 39);
+  y = writeWrapped(`We are very glad to inform you that in response to your request for a loan in order to meet your financial needs. At the outset we welcome you to meet of ${settings.companyName}.`, leftX, y, 181, 5.7) + 3;
+
+  y = writeWrapped(`You requested a short term loan, Sum of loan amount ${money(sanctionedAmount)} for the tenure of ${yearText} on dated ${approvalDate}. Your monthly EMI INR: ${money(approvedEmi).replace('INR ', '')} at the rate of ${approvedRate}% including rate of interest.`, leftX + 12, y, 160, 5.7) + 3;
+
+  y = writeWrapped(`When you submit amount of File Processing Fee legal consideration charge fee ${money(processingFee)}. After that it is our responsibility to hand over your approved loan value of ${money(sanctionedAmount)} in your bank account after verify your credit ability.`, leftX, y, 181, 5.7) + 2;
+  y = writeWrapped('Please continue your loan process without Hesitation.', leftX, y, 181, 5.7) + 2;
+
+  doc.setFont('helvetica', 'bold');
+  doc.text(`Processing fee Legal Consideration ${money(processingFee)}`, leftX, y);
+
+  y += 8;
+  const accountTop = y;
+  doc.setFontSize(10.6);
+  doc.setFont('helvetica', 'bold');
+  doc.setTextColor(0, 0, 0);
+  doc.text('Pay at This Account', leftX, accountTop);
+  doc.text('Credit Customer Account', 112, accountTop);
+
+  y = accountTop + 8.4;
+  doc.setTextColor(28, 39, 94);
+  doc.setFontSize(9.7);
+  doc.text('Name. -', leftX, y);
+  doc.text(payeeName, leftX + 24, y, { maxWidth: 70 });
+  doc.text('Name. -', 112, y);
+  doc.text(app.personalInfo.fullName.toUpperCase(), 136, y, { maxWidth: 60 });
+  y += 7.4;
+  doc.text('A/c No. -', leftX, y);
+  doc.text(payeeAccount, leftX + 24, y, { maxWidth: 70 });
+  doc.text('A/c No. -', 112, y);
+  doc.text(maskAccount(app.financialInfo.accountNumber), 136, y, { maxWidth: 58 });
+  y += 7.4;
+  doc.text('IFSC Code -', leftX, y);
+  doc.text(payeeIfsc, leftX + 31, y, { maxWidth: 62 });
+  doc.text('IFSC Code -', 112, y);
+  doc.text(app.financialInfo.ifscCode || 'To be verified', 145, y, { maxWidth: 50 });
+  y += 7.4;
+  doc.text(payeeBank.toUpperCase(), leftX + 31, y, { maxWidth: 70 });
+  doc.text((app.financialInfo.bankName || 'Customer Bank').toUpperCase(), 145, y, { maxWidth: 50 });
+
+  y += 9;
+  doc.setFont('helvetica', 'bolditalic');
+  doc.setTextColor(190, 24, 55);
+  doc.setFontSize(10);
+  doc.text('Note:-', leftX, y);
+  y += 7;
+  const notes = [
+    'We do not accept cash deposit.',
+    'We accept only NEFT/IMPS/Mobile banking/Net Banking/UPI/Other authorized digital modes.',
+    'Processing fee will be refundable within 24 hours if the application is not finally disbursed.',
   ];
-  conditions.forEach((condition, idx) => {
-    doc.text(`${idx + 1}. ${condition}`, 18, y, { maxWidth: 174 });
-    y += 5;
+  notes.forEach((note, idx) => {
+    y = writeWrapped(`${idx + 1}. ${note}`, leftX + 9, y, 168, 5.7) + 1;
   });
 
-  y += 5;
-  doc.setFillColor(255, 251, 235);
-  doc.setDrawColor(253, 230, 138);
-  doc.roundedRect(14, y, 182, 18, 2, 2, 'FD');
+  const footerY = 251;
   doc.setFont('helvetica', 'bold');
-  doc.setTextColor(146, 64, 14);
-  doc.text('Important:', 18, y + 7);
+  doc.setFontSize(11.2);
+  doc.setTextColor(0, 0, 0);
+  doc.text('Your Truely', leftX, footerY);
+  doc.text(settings.authorizedSignatoryName || 'Authorized Signatory', leftX, footerY + 11);
   doc.setFont('helvetica', 'normal');
-  doc.text('This sanction letter is not a cash approval guarantee. Disbursement is completed only after final verification and agreement completion.', 36, y + 7, { maxWidth: 154 });
-  doc.text('Do not pay cash to any person claiming guaranteed loan release.', 36, y + 13, { maxWidth: 154 });
+  doc.text(settings.authorizedSignatoryTitle || 'Customer Business', leftX, footerY + 17);
 
-  drawSignatures(doc, settings, 210);
-  drawFooter(doc, settings, `SANC-${app.id}`);
+  doc.setDrawColor(91, 106, 171);
+  doc.setTextColor(91, 106, 171);
+  doc.setFont('helvetica', 'bolditalic');
+  doc.setFontSize(11);
+  doc.circle(57, footerY + 5, 13, 'S');
+  doc.circle(57, footerY + 5, 10, 'S');
+  doc.text('APPROVED', 57, footerY + 3, { align: 'center', angle: -18 });
+  doc.setFontSize(8);
+  doc.text('M.D.', 57, footerY + 8, { align: 'center' });
+  doc.setFontSize(9);
+  doc.text('Verified By', 91, footerY + 9, { angle: -12 });
+  doc.setFontSize(7.2);
+  doc.text('E-signed and Verified', 91, footerY + 13, { angle: -12 });
+  doc.line(80, footerY + 16, 121, footerY + 6);
+
+  const verificationUrl = `${origin}/track-status?applicationId=${encodeURIComponent(app.id)}`;
+  await addQrImageOrFallback(doc, verificationUrl, 145, 238, 41);
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(7.6);
+  doc.setTextColor(71, 85, 105);
+  doc.text(`Verify: ${origin}/track-status`, 145, 282);
+  doc.text(`Ref: SANC/${app.id}/2026 | Issued: ${sanctionDate}`, margin, 291);
+  doc.text(`${settings.nbfcLicenseInfo} | ${settings.registrationNumber}`, pageWidth - margin, 291, { align: 'right' });
 
   doc.save(`DhaniFinance_Sanction_${app.id}.pdf`);
 }

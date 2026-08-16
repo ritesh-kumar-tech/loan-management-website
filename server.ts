@@ -1,3 +1,4 @@
+import 'dotenv/config';
 import express from 'express';
 import crypto from 'crypto';
 import path from 'path';
@@ -402,20 +403,27 @@ export async function createApp({ serveClient = true }: CreateAppOptions = {}) {
   const normPhone = (str: string) => String(str || '').replace(/\D/g, '').slice(-10);
 
   app.post('/api/applications/track', async (req, res) => {
-    const { identifier, applicationId, contact, otp, stage } = req.body;
+    const { identifier, applicationId, contact } = req.body;
     const rawSearch = String(identifier || applicationId || contact || '').trim();
     const lookupValue = rawSearch.toLowerCase();
     const searchPhone = normPhone(rawSearch);
+
+    if (!rawSearch) {
+      res.status(400).json({ success: false, error: 'Please enter your Application ID or registered mobile number.' });
+      return;
+    }
+    if (lookupValue.includes('@')) {
+      res.status(400).json({ success: false, error: 'Please track using Application ID or registered mobile number only.' });
+      return;
+    }
 
     const appItem = applications
       .filter((a) => {
         const aId = a.id.toLowerCase();
         const aPhone = normPhone(a.personalInfo?.mobile);
-        const aEmail = a.personalInfo?.email?.toLowerCase();
         return (
           aId === lookupValue ||
-          (searchPhone.length === 10 && aPhone === searchPhone) ||
-          (aEmail && aEmail === lookupValue)
+          (searchPhone.length === 10 && aPhone === searchPhone)
         );
       })
       .sort((a, b) => new Date(b.updatedAt || b.createdAt).getTime() - new Date(a.updatedAt || a.createdAt).getTime())[0];
@@ -425,53 +433,16 @@ export async function createApp({ serveClient = true }: CreateAppOptions = {}) {
       return;
     }
 
-    // Stage 1: Verify existence of application before requesting OTP
-    if (stage === 1 || (!otp && stage !== 2)) {
-      const trackEmail = normalizeIdentifier(appItem.personalInfo?.email || '');
-      if (!trackEmail) {
-        res.status(400).json({ success: false, error: 'This application does not have an email address for OTP verification. Please contact support.' });
-        return;
-      }
-      try {
-        const otpResult = await createOtp(trackEmail, 'TRACK_APPLICATION', 'Track Your Application');
-        if (!otpResult.ok) {
-          res.status(429).json({ success: false, error: otpResult.error });
-          return;
-        }
-      } catch (error) {
-        console.error('Track OTP send failed', error);
-        res.status(500).json({ success: false, error: "We couldn't send the OTP. Please try again." });
-        return;
-      }
-      res.json({
-        success: true,
-        stage: 1,
-        requiresOtp: true,
-        applicationId: appItem.id,
-        maskedMobile: maskContact(trackEmail),
-        applicantName: appItem.personalInfo?.fullName,
-        message: `A verification code has been sent to ${maskContact(trackEmail)}.`,
-      });
-      return;
-    }
-
-    // Stage 2: Verify OTP
-    const verification = verifyOtp(appItem.personalInfo?.email || rawSearch, 'TRACK_APPLICATION', otp);
-    if (!verification.ok) {
-      addAuditLog('public', 'guest', rawSearch, 'TRACKING_VERIFICATION_FAILED', 'LoanApplication', appItem.id, 'OTP verification failed');
-      res.status(403).json({ success: false, error: verification.error });
-      return;
-    }
-
     const matchingLoan = loanAccounts.find(
       (l) => l.applicationId === appItem.id || (l.userId && l.userId === appItem.userId)
     ) || null;
 
-    addAuditLog('public', 'guest', rawSearch, 'TRACKING_VERIFIED', 'LoanApplication', appItem.id, 'Customer portal access verified via OTP');
+    addAuditLog('public', 'guest', rawSearch, 'TRACKING_ACCESSED', 'LoanApplication', appItem.id, 'Customer portal accessed by application ID or mobile number');
 
     res.json({
       success: true,
-      stage: 2,
+      stage: 1,
+      requiresOtp: false,
       application: maskApplicationForPublic(appItem),
       loanAccount: matchingLoan,
       sessionToken: `cust_token_${appItem.id}_${Date.now()}`,
@@ -479,7 +450,7 @@ export async function createApp({ serveClient = true }: CreateAppOptions = {}) {
   });
 
   app.post('/api/applications', (req, res) => {
-    const { emailVerificationToken, ...data } = req.body;
+    const data = req.body;
     let appItem: LoanApplication;
 
     if (data.id && applications.some((a) => a.id === data.id)) {
@@ -487,11 +458,6 @@ export async function createApp({ serveClient = true }: CreateAppOptions = {}) {
       appItem = { ...applications[idx], ...data, updatedAt: new Date().toISOString() };
       applications[idx] = appItem;
     } else {
-      const applicantEmail = data.personalInfo?.email;
-      if (!consumeVerifiedOtp(applicantEmail, 'APPLICATION_EMAIL', emailVerificationToken)) {
-        res.status(403).json({ success: false, error: 'Please verify your email address before submitting the application.' });
-        return;
-      }
       const appSeq = String(applications.length + 101).padStart(6, '0');
       const newId = `LN-2026-${appSeq}`;
       appItem = {
@@ -1206,7 +1172,7 @@ export async function createApp({ serveClient = true }: CreateAppOptions = {}) {
     } else {
       const distPath = path.join(process.cwd(), 'dist');
       app.use(express.static(distPath));
-      app.get('*all', (req, res) => {
+      app.get('*', (req, res) => {
         res.sendFile(path.join(distPath, 'index.html'));
       });
     }

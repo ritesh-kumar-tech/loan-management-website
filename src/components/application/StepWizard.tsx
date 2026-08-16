@@ -11,6 +11,10 @@ interface StepWizardProps {
   selectedProductId?: string;
   initialAmount?: number;
   initialTenure?: number;
+  initialPurpose?: string;
+  initialEmploymentType?: EmploymentInfo['employmentType'];
+  initialMonthlyIncome?: number;
+  initialExistingEmis?: number;
   userId: string;
   userEmail: string;
   onComplete: (app: LoanApplication) => void;
@@ -23,18 +27,22 @@ export const StepWizard: React.FC<StepWizardProps> = ({
   selectedProductId,
   initialAmount,
   initialTenure,
+  initialPurpose,
+  initialEmploymentType,
+  initialMonthlyIncome,
+  initialExistingEmis,
   userId,
   userEmail,
   onComplete,
   onCancel,
 }) => {
-  const [currentStep, setCurrentStep] = useState(1);
+  const [currentStep, setCurrentStep] = useState(initialPurpose ? 2 : 1);
 
   // Requirement
   const [productId, setProductId] = useState(selectedProductId || products[0]?.id || 'prod_personal');
   const [amount, setAmount] = useState(initialAmount || products[0]?.minAmount || 25000);
   const [tenure, setTenure] = useState(initialTenure || 24);
-  const [purpose, setPurpose] = useState('');
+  const [purpose, setPurpose] = useState(initialPurpose || '');
   const [preferredEmiDay, setPreferredEmiDay] = useState(5);
 
   // Personal Info
@@ -59,10 +67,10 @@ export const StepWizard: React.FC<StepWizardProps> = ({
 
   // Employment Info
   const [employment, setEmployment] = useState<EmploymentInfo>({
-    employmentType: 'salaried',
+    employmentType: initialEmploymentType || 'salaried',
     companyOrBizName: '',
     designationOrBizType: '',
-    monthlyIncome: 0,
+    monthlyIncome: initialMonthlyIncome || 0,
     workExperienceYears: 0,
     officeAddress: '',
     salaryBankName: '',
@@ -70,9 +78,9 @@ export const StepWizard: React.FC<StepWizardProps> = ({
 
   // Financial Info
   const [financial, setFinancial] = useState<FinancialInfo>({
-    monthlyIncome: 0,
+    monthlyIncome: initialMonthlyIncome || 0,
     additionalIncome: 0,
-    existingEmis: 0,
+    existingEmis: initialExistingEmis || 0,
     monthlyExpenses: 0,
     bankName: '',
     accountNumber: '',
@@ -102,18 +110,10 @@ export const StepWizard: React.FC<StepWizardProps> = ({
   const [submitting, setSubmitting] = useState(false);
   const [createdApplication, setCreatedApplication] = useState<LoanApplication | null>(null);
   const [eligibilityResult, setEligibilityResult] = useState<EligibilityResult | null>(null);
-  const [emailOtp, setEmailOtp] = useState('');
-  const [emailOtpToken, setEmailOtpToken] = useState('');
-  const [emailOtpMasked, setEmailOtpMasked] = useState('');
-  const [emailOtpLoading, setEmailOtpLoading] = useState(false);
-  const [emailOtpError, setEmailOtpError] = useState<string | null>(null);
-  const [emailOtpSent, setEmailOtpSent] = useState(false);
-  const [emailOtpCooldownUntil, setEmailOtpCooldownUntil] = useState(0);
-
   const selectedProduct = products.find((p) => p.id === productId) || products[0];
   const requiredDocumentNames = selectedProduct?.requiredDocs?.length ? selectedProduct.requiredDocs : ['PAN Card', 'Aadhaar Card', 'Passport-size Photograph', 'Bank Statement'];
-  const applicationSteps = ['Loan', 'Personal', 'Financial', 'Documents', 'Review'];
-  const visibleStep = Math.min(currentStep, 5);
+  const applicationSteps = ['Loan', 'Personal & Banking', 'Review'];
+  const visibleStep = Math.min(currentStep, 3);
   const maskPan = (value: string) => value?.length === 10 ? `${value.slice(0, 5)}****${value.slice(9)}` : value || '-';
   const maskAccount = (value: string) => {
     const clean = String(value || '').replace(/\s/g, '');
@@ -185,15 +185,6 @@ export const StepWizard: React.FC<StepWizardProps> = ({
         setStepError('Please enter your current residential address.');
         return false;
       }
-    } else if (step === 3) {
-      if (!financial.monthlyIncome || financial.monthlyIncome <= 0) {
-        setStepError('Please enter your monthly net salary/income.');
-        return false;
-      }
-      if (financial.existingEmis === undefined || financial.existingEmis === null || isNaN(financial.existingEmis)) {
-        setStepError('Please enter your existing monthly loan EMIs (enter 0 if none).');
-        return false;
-      }
       if (!financial.bankName.trim()) {
         setStepError('Please enter your bank name for disbursement.');
         return false;
@@ -211,12 +202,6 @@ export const StepWizard: React.FC<StepWizardProps> = ({
         setStepError('Please enter a valid 11-character IFSC code (e.g. HDFC0001234).');
         return false;
       }
-    } else if (step === 4) {
-      const missingDocs = requiredDocumentNames.filter((docName) => !documents.some((doc) => doc.docType === docName.toLowerCase().replace(/[^a-z0-9]+/g, '_')));
-      if (missingDocs.length) {
-        setStepError(`Please upload all required documents: ${missingDocs.join(', ')}.`);
-        return false;
-      }
     }
     return true;
   };
@@ -225,68 +210,6 @@ export const StepWizard: React.FC<StepWizardProps> = ({
     if (validateStep(currentStep)) {
       setStepError(null);
       setCurrentStep(currentStep + 1);
-    }
-  };
-
-  const handleEmailChange = (email: string) => {
-    setPersonal({ ...personal, email });
-    setEmailOtp('');
-    setEmailOtpToken('');
-    setEmailOtpError(null);
-    setEmailOtpSent(false);
-  };
-
-  const handleChangeEmail = () => {
-    setEmailOtp('');
-    setEmailOtpToken('');
-    setEmailOtpError(null);
-    setEmailOtpSent(false);
-    setEmailOtpMasked('');
-  };
-
-  const sendEmailOtp = async () => {
-    const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!emailPattern.test(personal.email.trim())) {
-      setEmailOtpError('Please enter a valid email address before sending OTP.');
-      return;
-    }
-    setEmailOtpLoading(true);
-    setEmailOtpError(null);
-    try {
-      const res = await api.sendOtp({ identifier: personal.email.trim(), purpose: 'APPLICATION_EMAIL' });
-      if (!res.success) {
-        setEmailOtpError(res.error || "We couldn't send the OTP. Please try again.");
-        return;
-      }
-      setEmailOtpSent(true);
-      setEmailOtpMasked(res.maskedContact || personal.email);
-      setEmailOtpCooldownUntil(Date.now() + (res.cooldownSeconds || 60) * 1000);
-    } catch {
-      setEmailOtpError("We couldn't send the OTP. Please try again.");
-    } finally {
-      setEmailOtpLoading(false);
-    }
-  };
-
-  const verifyEmailOtp = async () => {
-    if (!/^\d{6}$/.test(emailOtp.trim())) {
-      setEmailOtpError('Please enter the 6-digit OTP sent to your email.');
-      return;
-    }
-    setEmailOtpLoading(true);
-    setEmailOtpError(null);
-    try {
-      const res = await api.verifyOtp({ identifier: personal.email.trim(), purpose: 'APPLICATION_EMAIL', otp: emailOtp.trim() });
-      if (!res.success || !res.verificationToken) {
-        setEmailOtpError(res.error || 'The OTP is incorrect or has expired.');
-        return;
-      }
-      setEmailOtpToken(res.verificationToken);
-      setEmailOtpError(null);
-    } catch {
-      setEmailOtpError('The OTP is incorrect or has expired.');
-    } finally {
-      setEmailOtpLoading(false);
     }
   };
 
@@ -325,24 +248,15 @@ export const StepWizard: React.FC<StepWizardProps> = ({
   };
 
   const handleFinalSubmit = async () => {
-    const missingDocs = requiredDocumentNames.filter((docName) => !documents.some((doc) => doc.docType === docName.toLowerCase().replace(/[^a-z0-9]+/g, '_')));
-    if (missingDocs.length) {
-      setCurrentStep(4);
-      setUploadError(`Please upload required documents: ${missingDocs.join(', ')}.`);
-      return;
-    }
-    if (!emailOtpToken) {
-      setCurrentStep(5);
-      setStepError('Please verify your email address before submitting the application.');
-      return;
-    }
     setSubmitting(true);
     try {
+      const assessedMonthlyIncome = financial.monthlyIncome || employment.monthlyIncome || selectedProduct.minIncome || 50000;
+      const assessedExistingEmis = Number.isFinite(financial.existingEmis) ? financial.existingEmis : 0;
       // 1. Run Automated Eligibility Engine
       const elg = await api.assessEligibility({
         productId,
-        monthlyIncome: financial.monthlyIncome,
-        existingEmis: financial.existingEmis,
+        monthlyIncome: assessedMonthlyIncome,
+        existingEmis: assessedExistingEmis,
         requestedAmount: amount,
         requestedTenureMonths: tenure,
         employmentType: employment.employmentType,
@@ -366,7 +280,6 @@ export const StepWizard: React.FC<StepWizardProps> = ({
         references,
         documents,
         eligibilityResult: elg,
-        emailVerificationToken: emailOtpToken,
       });
 
       setCreatedApplication(savedApp);
@@ -382,9 +295,9 @@ export const StepWizard: React.FC<StepWizardProps> = ({
   return (
     <div className="max-w-4xl mx-auto px-4 py-8">
       {/* Progress Bar */}
-      {currentStep <= 5 && (
+      {currentStep <= 3 && (
       <div className="mb-8">
-        <div className="hidden sm:grid grid-cols-5 gap-2 mb-4">
+        <div className="hidden sm:grid grid-cols-3 gap-2 mb-4">
           {applicationSteps.map((label, idx) => {
             const stepNo = idx + 1;
             const isActive = currentStep === stepNo;
@@ -399,13 +312,13 @@ export const StepWizard: React.FC<StepWizardProps> = ({
           })}
         </div>
         <div className="flex items-center justify-between text-xs font-bold text-slate-500 mb-2">
-          <span>Step {visibleStep} of 5: {applicationSteps[visibleStep - 1]}</span>
-          <span>{Math.round((visibleStep / 5) * 100)}% Completed</span>
+          <span>Step {visibleStep} of 3: {applicationSteps[visibleStep - 1]}</span>
+          <span>{Math.round((visibleStep / 3) * 100)}% Completed</span>
         </div>
         <div className="w-full h-2 bg-slate-200 rounded-full overflow-hidden">
           <div
             className="h-full bg-blue-700 transition-all duration-300"
-            style={{ width: `${(visibleStep / 5) * 100}%` }}
+            style={{ width: `${(visibleStep / 3) * 100}%` }}
           />
         </div>
       </div>
@@ -533,8 +446,8 @@ export const StepWizard: React.FC<StepWizardProps> = ({
         {currentStep === 2 && (
           <div className="space-y-6">
             <div className="border-b border-slate-100 pb-3">
-              <h2 className="text-xl font-extrabold text-slate-900">Step 2: Personal Information</h2>
-              <p className="text-sm text-slate-500 mt-1">Tell us about yourself and verify your email.</p>
+              <h2 className="text-xl font-extrabold text-slate-900">Step 2: Personal & Banking Information</h2>
+              <p className="text-sm text-slate-500 mt-1">Tell us about yourself and your disbursement account.</p>
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -592,74 +505,13 @@ export const StepWizard: React.FC<StepWizardProps> = ({
               </div>
               <div>
                 <label className="block text-xs font-bold text-slate-700 mb-1">Email Address *</label>
-                <div className="flex gap-2">
-                  <input
-                    type="email"
-                    required
-                    value={personal.email}
-                    onChange={(e) => handleEmailChange(e.target.value)}
-                    disabled={Boolean(emailOtpToken)}
-                    className="w-full px-3.5 py-2 rounded-xl border border-slate-300 text-sm disabled:bg-emerald-50 disabled:border-emerald-200"
-                  />
-                  {emailOtpToken && (
-                    <button
-                      type="button"
-                      onClick={handleChangeEmail}
-                      className="px-3 py-2 rounded-xl bg-white border border-slate-200 text-xs font-bold text-slate-700 cursor-pointer whitespace-nowrap"
-                    >
-                      Change
-                    </button>
-                  )}
-                </div>
-                <div className="mt-2 rounded-xl border border-blue-100 bg-blue-50/60 p-3 space-y-2">
-                  <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
-                    <div className="text-xs">
-                      <span className="font-bold text-slate-900 block">Email OTP Verification *</span>
-                      <span className="text-slate-500">
-                        {emailOtpToken ? `${personal.email} verified.` : emailOtpSent ? `Verification code sent to ${emailOtpMasked || personal.email}` : 'Verify this email before final submission.'}
-                      </span>
-                    </div>
-                    {!emailOtpToken && (
-                      <button
-                        type="button"
-                        onClick={sendEmailOtp}
-                        disabled={emailOtpLoading || (emailOtpCooldownUntil > Date.now() && !emailOtpToken)}
-                        className="px-3 py-1.5 rounded-lg bg-slate-900 text-white text-[11px] font-bold disabled:opacity-50 cursor-pointer"
-                      >
-                        {emailOtpLoading ? 'Sending...' : emailOtpSent ? 'Resend OTP' : 'Send OTP'}
-                      </button>
-                    )}
-                  </div>
-                  {emailOtpSent && !emailOtpToken && (
-                    <div className="space-y-1.5">
-                      <div className="flex flex-col sm:flex-row gap-2">
-                        <input
-                          value={emailOtp}
-                          onChange={(e) => setEmailOtp(e.target.value.replace(/\D/g, '').slice(0, 6))}
-                          inputMode="numeric"
-                          maxLength={6}
-                          placeholder="6-digit OTP"
-                          className="flex-1 px-3 py-2 rounded-lg border border-blue-100 bg-white text-sm font-bold tracking-widest"
-                        />
-                        <button
-                          type="button"
-                          onClick={verifyEmailOtp}
-                          disabled={emailOtpLoading}
-                          className="px-4 py-2 rounded-lg bg-blue-700 text-white text-xs font-bold disabled:opacity-50 cursor-pointer"
-                        >
-                          {emailOtpLoading ? 'Verifying...' : 'Verify OTP'}
-                        </button>
-                      </div>
-                      <p className="text-[11px] font-semibold text-blue-800">Demo OTP: 123456</p>
-                    </div>
-                  )}
-                  {emailOtpToken && (
-                    <div className="text-xs font-bold text-emerald-700 flex items-center gap-1">
-                      <Check className="w-3.5 h-3.5" /> Email verified
-                    </div>
-                  )}
-                  {emailOtpError && <div className="text-xs font-semibold text-rose-700">{emailOtpError}</div>}
-                </div>
+                <input
+                  type="email"
+                  required
+                  value={personal.email}
+                  onChange={(e) => setPersonal({ ...personal, email: e.target.value })}
+                  className="w-full px-3.5 py-2 rounded-xl border border-slate-300 text-sm"
+                />
               </div>
             </div>
 
@@ -673,170 +525,54 @@ export const StepWizard: React.FC<StepWizardProps> = ({
                 className="w-full px-3.5 py-2 rounded-xl border border-slate-300 text-sm"
               />
             </div>
+
+            <div className="border-t border-slate-100 pt-5">
+              <h3 className="text-sm font-extrabold text-slate-900 mb-4">Banking Details</h3>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">Bank Name for Disbursement *</label>
+                  <input
+                    type="text"
+                    required
+                    value={financial.bankName}
+                    placeholder="e.g. HDFC Bank, SBI, ICICI"
+                    onChange={(e) => setFinancial({ ...financial, bankName: e.target.value })}
+                    className="w-full px-3.5 py-2 rounded-xl border border-slate-300 text-sm"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">Bank Account Number *</label>
+                  <input
+                    type="text"
+                    required
+                    value={financial.accountNumber}
+                    placeholder="Enter bank account number"
+                    onChange={(e) => setFinancial({ ...financial, accountNumber: e.target.value })}
+                    className="w-full px-3.5 py-2 rounded-xl border border-slate-300 text-sm font-mono"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">IFSC Code *</label>
+                  <input
+                    type="text"
+                    required
+                    value={financial.ifscCode}
+                    placeholder="e.g. HDFC0000123"
+                    onChange={(e) => setFinancial({ ...financial, ifscCode: e.target.value.toUpperCase() })}
+                    className="w-full px-3.5 py-2 rounded-xl border border-slate-300 text-sm uppercase font-mono"
+                  />
+                </div>
+              </div>
+            </div>
           </div>
         )}
-
-        {/* STEP 3: Financial Information */}
+        {/* STEP 3: Review & Declarations */}
         {currentStep === 3 && (
           <div className="space-y-6">
-            <div className="border-b border-slate-100 pb-3">
-              <h2 className="text-xl font-extrabold text-slate-900">Step 3: Income & Banking Details</h2>
-              <p className="text-sm text-slate-500 mt-1">Tell us about your income and account for loan processing.</p>
-            </div>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">Monthly Net Salary / Income (₹) *</label>
-                <input
-                  type="number"
-                  required
-                  value={financial.monthlyIncome || ''}
-                  placeholder="e.g. 50000"
-                  onChange={(e) => setFinancial({ ...financial, monthlyIncome: Number(e.target.value) })}
-                  className="w-full px-3.5 py-2 rounded-xl border border-slate-300 text-sm font-bold"
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">Existing Monthly Loan EMIs (₹) *</label>
-                <input
-                  type="number"
-                  required
-                  value={financial.existingEmis !== undefined && financial.existingEmis !== null ? financial.existingEmis : ''}
-                  placeholder="e.g. 0 or existing monthly EMI"
-                  onChange={(e) => setFinancial({ ...financial, existingEmis: Number(e.target.value) })}
-                  className="w-full px-3.5 py-2 rounded-xl border border-slate-300 text-sm font-bold"
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">Bank Name for Disbursement *</label>
-                <input
-                  type="text"
-                  required
-                  value={financial.bankName}
-                  placeholder="e.g. HDFC Bank, SBI, ICICI"
-                  onChange={(e) => setFinancial({ ...financial, bankName: e.target.value })}
-                  className="w-full px-3.5 py-2 rounded-xl border border-slate-300 text-sm"
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">Bank Account Number *</label>
-                <input
-                  type="text"
-                  required
-                  value={financial.accountNumber}
-                  placeholder="Enter bank account number"
-                  onChange={(e) => setFinancial({ ...financial, accountNumber: e.target.value })}
-                  className="w-full px-3.5 py-2 rounded-xl border border-slate-300 text-sm font-mono"
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">IFSC Code *</label>
-                <input
-                  type="text"
-                  required
-                  value={financial.ifscCode}
-                  placeholder="e.g. HDFC0000123"
-                  onChange={(e) => setFinancial({ ...financial, ifscCode: e.target.value.toUpperCase() })}
-                  className="w-full px-3.5 py-2 rounded-xl border border-slate-300 text-sm uppercase font-mono"
-                />
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* STEP 4: Document Upload */}
-        {currentStep === 4 && (
-          <div className="space-y-6">
-            <div className="border-b border-slate-100 pb-3">
-              <h2 className="text-xl font-extrabold text-slate-900">Step 4: Upload KYC & Income Documents</h2>
-              <p className="text-sm text-slate-500 mt-1">Upload PDF, JPG, JPEG, or PNG files. Maximum 5 MB per document.</p>
-            </div>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              {requiredDocumentNames.map((docName) => {
-                const docItem = { type: docName.toLowerCase().replace(/[^a-z0-9]+/g, '_'), label: `${docName} *` };
-                const uploaded = documents.find((d) => d.docType === docItem.type);
-                return (
-                  <div key={docItem.type} className="p-4 rounded-xl border border-slate-200 bg-slate-50 space-y-2">
-                    <span className="text-xs font-bold text-slate-800 block">{docItem.label}</span>
-                    {uploaded ? (
-                      <div className="p-3 rounded-xl bg-white border border-emerald-200 space-y-3">
-                        <div className="flex items-start justify-between gap-3">
-                          <div className="min-w-0">
-                            <span className="font-bold text-slate-900 text-xs truncate block" title={uploaded.fileName}>{uploaded.fileName}</span>
-                            <span className="text-[10px] text-slate-500">{fileSize(uploaded.fileUrl)}</span>
-                          </div>
-                          <span className="px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 text-[10px] font-black uppercase shrink-0">Uploaded</span>
-                        </div>
-                        <div className="grid grid-cols-3 gap-2">
-                          <button
-                            type="button"
-                            onClick={() => setPreviewDoc(uploaded)}
-                            className="min-h-9 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-800 text-[11px] font-bold inline-flex items-center justify-center gap-1 cursor-pointer"
-                          >
-                            <Eye className="w-3.5 h-3.5" /> View
-                          </button>
-                          <label className="min-h-9 rounded-lg bg-blue-50 hover:bg-blue-100 text-blue-800 text-[11px] font-bold inline-flex items-center justify-center gap-1 cursor-pointer">
-                            <RefreshCw className="w-3.5 h-3.5" /> Replace
-                            <input
-                              type="file"
-                              accept=".pdf,.jpg,.jpeg,.png,application/pdf,image/jpeg,image/png"
-                              onChange={(e) => {
-                                if (e.target.files?.[0] && window.confirm(`Replace ${docName}?`)) {
-                                  handleDocumentUpload(docItem.type, docItem.label, e.target.files[0]);
-                                }
-                                e.currentTarget.value = '';
-                              }}
-                              className="hidden"
-                            />
-                          </label>
-                          <button
-                            type="button"
-                            onClick={() => handleRemoveDocument(docItem.type)}
-                            className="min-h-9 rounded-lg bg-rose-50 hover:bg-rose-100 text-rose-700 text-[11px] font-bold inline-flex items-center justify-center gap-1 cursor-pointer"
-                          >
-                            <Trash2 className="w-3.5 h-3.5" /> Remove
-                          </button>
-                        </div>
-                      </div>
-                    ) : (
-                      <label className="block p-3 rounded-lg border border-dashed border-slate-300 bg-white text-center cursor-pointer hover:bg-slate-100 transition-colors">
-                        <Upload className="w-4 h-4 text-slate-400 mx-auto mb-1" />
-                        <span className="text-xs text-slate-600 font-medium block">Select File (PDF / JPG)</span>
-                        <span className="text-[10px] text-slate-400 block mt-1">Max 5 MB. Unsafe executable files are blocked.</span>
-                        <input
-                          type="file"
-                          accept=".pdf,.jpg,.jpeg,.png,application/pdf,image/jpeg,image/png"
-                          onChange={(e) => {
-                            if (e.target.files?.[0]) {
-                              handleDocumentUpload(docItem.type, docItem.label, e.target.files[0]);
-                            }
-                          }}
-                          className="hidden"
-                        />
-                      </label>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
-            {uploadError && (
-              <div className="p-3 rounded-xl bg-rose-50 border border-rose-200 text-rose-800 text-xs font-semibold">
-                {uploadError}
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* STEP 5: Review & Declarations */}
-        {currentStep === 5 && (
-          <div className="space-y-6">
             <h2 className="text-xl font-extrabold text-slate-900 border-b border-slate-100 pb-3">
-              Step 5: Final Review & Declarations
+              Step 3: Final Review & Declarations
             </h2>
 
             <div className="space-y-4">
@@ -854,44 +590,14 @@ export const StepWizard: React.FC<StepWizardProps> = ({
                 <ReviewRow label="Date of Birth" value={personal.dob ? formatDate(personal.dob) : '-'} />
                 <ReviewRow label="PAN" value={maskPan(personal.panNumber)} />
                 <ReviewRow label="Mobile" value={`+91 ${personal.mobile}`} />
-                <ReviewRow label="Email" value={`${personal.email} ${emailOtpToken ? '✓ Verified' : 'Pending'}`} valueClass={emailOtpToken ? 'text-emerald-700' : 'text-rose-700'} />
+                <ReviewRow label="Email" value={personal.email} />
                 <ReviewRow label="Address" value={personal.currentAddress} />
               </ReviewSection>
 
-              <ReviewSection title="Financial Details" onEdit={() => setCurrentStep(3)}>
-                <ReviewRow label="Monthly Income" value={formatINR(financial.monthlyIncome)} />
-                <ReviewRow label="Existing EMI" value={formatINR(financial.existingEmis || 0)} />
+              <ReviewSection title="Banking Details" onEdit={() => setCurrentStep(2)}>
                 <ReviewRow label="Bank Name" value={financial.bankName} />
                 <ReviewRow label="Bank Account" value={maskAccount(financial.accountNumber)} />
                 <ReviewRow label="IFSC" value={financial.ifscCode} />
-              </ReviewSection>
-
-              <ReviewSection title="Documents" onEdit={() => setCurrentStep(4)}>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                  {requiredDocumentNames.map((docName) => {
-                    const docType = docName.toLowerCase().replace(/[^a-z0-9]+/g, '_');
-                    const uploaded = documents.find((doc) => doc.docType === docType);
-                    return (
-                      <div key={docType} className="rounded-xl border border-slate-200 bg-white px-3 py-2 flex items-center justify-between gap-2">
-                        <div className="min-w-0">
-                          <span className="block text-xs font-bold text-slate-900">{docName}</span>
-                          <span className={`block text-[11px] font-semibold ${uploaded ? 'text-emerald-700' : 'text-rose-700'}`}>
-                            {uploaded ? '✓ Uploaded' : 'Missing'}
-                          </span>
-                        </div>
-                        {uploaded && (
-                          <button
-                            type="button"
-                            onClick={() => setPreviewDoc(uploaded)}
-                            className="px-2.5 py-1 rounded-lg bg-slate-100 text-[10px] font-bold text-slate-700 cursor-pointer"
-                          >
-                            View
-                          </button>
-                        )}
-                      </div>
-                    );
-                  })}
-                </div>
               </ReviewSection>
             </div>
 
@@ -1021,7 +727,7 @@ export const StepWizard: React.FC<StepWizardProps> = ({
               <ChevronLeft className="w-4 h-4" /> {currentStep === 1 ? 'Cancel' : 'Back'}
             </button>
 
-            {currentStep < 5 ? (
+            {currentStep < 3 ? (
               <button
                 onClick={handleNextStep}
                 className="px-6 py-2.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-white text-sm font-semibold flex items-center gap-1 cursor-pointer shadow-sm"
@@ -1031,7 +737,7 @@ export const StepWizard: React.FC<StepWizardProps> = ({
             ) : (
               <button
                 onClick={handleFinalSubmit}
-                disabled={submitting || !termsAccepted || !creditCheckConsent || !emailOtpToken}
+                disabled={submitting || !termsAccepted || !creditCheckConsent}
                 className="px-6 py-2.5 rounded-xl bg-blue-700 hover:bg-blue-800 text-white text-sm font-bold flex items-center gap-1.5 cursor-pointer shadow-md disabled:opacity-50"
               >
                 {submitting ? 'Submitting Application...' : 'Submit Loan Application'}

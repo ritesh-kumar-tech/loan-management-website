@@ -132,7 +132,7 @@ export const api = {
     }
   },
 
-  async trackApplication(payload: { identifier?: string; applicationId?: string; contact?: string; otp?: string; stage?: number }): Promise<{
+  async trackApplication(payload: { identifier?: string; applicationId?: string; contact?: string }): Promise<{
     success: boolean;
     stage?: number;
     requiresOtp?: boolean;

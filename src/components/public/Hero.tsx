@@ -1,13 +1,21 @@
 import React, { useMemo, useState } from 'react';
 import { ArrowRight, Calculator, CheckCircle2, Clock, FileText, Lock, ShieldCheck, Sparkles, UserCheck, WalletCards } from 'lucide-react';
-import { CmsContent, CompanySettings, LoanProduct } from '../../types';
+import { CmsContent, CompanySettings, EmploymentInfo, LoanProduct } from '../../types';
 import { formatINR } from '../../utils/calculator';
 
 interface HeroProps {
   settings: CompanySettings;
   products: LoanProduct[];
   cms?: CmsContent;
-  onApplyNow: (productId?: string, amount?: number, tenure?: number) => void;
+  onApplyNow: (draft: {
+    productId?: string;
+    amount?: number;
+    tenure?: number;
+    purpose?: string;
+    employmentType?: EmploymentInfo['employmentType'];
+    monthlyIncome?: number;
+    existingEmis?: number;
+  }) => void;
   onCalculateEmi: () => void;
   onNavigate?: (tab: string) => void;
 }
@@ -23,6 +31,9 @@ export const Hero: React.FC<HeroProps> = ({ settings, products, cms, onApplyNow,
   const [employmentType, setEmploymentType] = useState('salaried');
   const [monthlyIncome, setMonthlyIncome] = useState<number | ''>('');
   const [existingEmi, setExistingEmi] = useState<number | ''>('');
+  const heroBackgroundImage = cms?.promotionalSlides?.find((slide) => slide.isActive && slide.productId === productId)?.imageUrl
+    || cms?.promotionalSlides?.find((slide) => slide.isActive)?.imageUrl
+    || 'https://images.unsplash.com/photo-1551836022-d5d88e9218df?w=1200&h=1200&fit=crop&auto=format';
 
   const handleProductChange = (nextId: string) => {
     const product = activeProducts.find((item) => item.id === nextId);
@@ -35,7 +46,15 @@ export const Hero: React.FC<HeroProps> = ({ settings, products, cms, onApplyNow,
 
   const handleSubmit = (event: React.FormEvent) => {
     event.preventDefault();
-    onApplyNow(productId, amount, tenure);
+    onApplyNow({
+      productId,
+      amount,
+      tenure,
+      purpose,
+      employmentType: employmentType as EmploymentInfo['employmentType'],
+      monthlyIncome: typeof monthlyIncome === 'number' ? monthlyIncome : undefined,
+      existingEmis: typeof existingEmi === 'number' ? existingEmi : undefined,
+    });
   };
 
   return (
@@ -45,36 +64,46 @@ export const Hero: React.FC<HeroProps> = ({ settings, products, cms, onApplyNow,
       <div className="absolute left-0 right-0 bottom-0 h-28 bg-gradient-to-t from-[#F6FAFF] to-transparent" />
 
       <div className="relative df-container py-16 sm:py-20 lg:py-28">
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-10 xl:gap-14 items-center min-h-[640px]">
-          <div className="lg:col-span-6 space-y-7 text-center lg:text-left animate-[fadeUp_.6s_ease-out_both]">
-            <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-white/10 border border-white/20 text-blue-100 text-xs font-bold uppercase tracking-wider">
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 xl:gap-12 items-center min-h-[640px]">
+          <div
+            className="relative overflow-hidden lg:col-span-6 rounded-[28px] border border-white/15 px-5 py-7 sm:px-8 lg:px-9 lg:py-10 shadow-2xl shadow-blue-950/25 min-h-[620px] animate-[fadeUp_.6s_ease-out_both]"
+            style={{
+              backgroundImage: `linear-gradient(90deg, rgba(7, 27, 61, 0.98) 0%, rgba(7, 27, 61, 0.9) 44%, rgba(7, 48, 111, 0.58) 100%), url("${heroBackgroundImage}")`,
+              backgroundSize: 'cover',
+              backgroundPosition: 'center right',
+            }}
+          >
+            <div className="absolute inset-0 bg-gradient-to-t from-[#071B3D]/90 via-transparent to-[#071B3D]/30" />
+            <div className="absolute inset-0 opacity-[0.16] bg-[radial-gradient(#ffffff_1px,transparent_1px)] [background-size:18px_18px]" />
+            <div className="relative z-10 h-full flex flex-col justify-center space-y-6 text-center lg:text-left">
+            <div className="inline-flex w-fit mx-auto lg:mx-0 items-center gap-2 px-4 py-2 rounded-full bg-white/12 border border-white/25 text-blue-50 text-xs font-bold uppercase tracking-wider backdrop-blur">
               <ShieldCheck className="w-4 h-4 text-sky-200" />
               {settings.nbfcLicenseInfo}
             </div>
 
-            <h1 className="text-[2.65rem] sm:text-5xl lg:text-[4rem] font-black tracking-tight leading-[1.06] max-w-3xl mx-auto lg:mx-0">
+            <h1 className="text-[2.35rem] sm:text-5xl lg:text-[3.55rem] font-black tracking-tight leading-[1.06] max-w-2xl mx-auto lg:mx-0 drop-shadow-sm">
               Start Your Loan Application Online
             </h1>
 
-            <p className="text-base sm:text-lg lg:text-xl text-blue-100 max-w-2xl mx-auto lg:mx-0 leading-relaxed">
-              Choose a loan option, enter your requirement, and continue into secure document upload, verification, approval, disbursement, and EMI tracking.
+            <p className="text-base sm:text-lg text-blue-50 max-w-xl mx-auto lg:mx-0 leading-relaxed">
+              Choose a loan option, enter your requirement, and continue into personal details, banking details, approval, disbursement, and EMI tracking.
             </p>
 
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 max-w-2xl mx-auto lg:mx-0 text-left">
-              <div className="bg-white/12 p-5 rounded-[20px] border border-white/15 backdrop-blur shadow-lg shadow-blue-950/10">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 max-w-2xl mx-auto lg:mx-0 text-left">
+              <div className="bg-[#071B3D]/62 p-4 rounded-2xl border border-white/18 backdrop-blur-md shadow-lg shadow-blue-950/10">
                 <Sparkles className="w-5 h-5 text-sky-200 mb-3" />
                 <span className="text-xs text-blue-100 font-semibold block uppercase">Interest from</span>
-                <span className="text-2xl font-black text-white">{cms?.heroStartingRate || 6}% p.a.</span>
+                <span className="text-[1.65rem] leading-tight font-black text-white">{cms?.heroStartingRate || 6}% p.a.</span>
               </div>
-              <div className="bg-white/12 p-5 rounded-[20px] border border-white/15 backdrop-blur shadow-lg shadow-blue-950/10">
+              <div className="bg-[#071B3D]/62 p-4 rounded-2xl border border-white/18 backdrop-blur-md shadow-lg shadow-blue-950/10">
                 <FileText className="w-5 h-5 text-sky-200 mb-3" />
                 <span className="text-xs text-blue-100 font-semibold block uppercase">Loan range</span>
-                <span className="text-2xl font-black text-white">{cms?.heroAmountRange || '₹25K - ₹2Cr'}</span>
+                <span className="text-[1.65rem] leading-tight font-black text-white">{cms?.heroAmountRange || '₹25K - ₹2Cr'}</span>
               </div>
-              <div className="bg-white/12 p-5 rounded-[20px] border border-white/15 backdrop-blur shadow-lg shadow-blue-950/10">
+              <div className="bg-[#071B3D]/62 p-4 rounded-2xl border border-white/18 backdrop-blur-md shadow-lg shadow-blue-950/10">
                 <Clock className="w-5 h-5 text-sky-200 mb-3" />
                 <span className="text-xs text-blue-100 font-semibold block uppercase">Flexible tenure</span>
-                <span className="text-2xl font-black text-white">{cms?.heroTenure || '12 - 300 months'}</span>
+                <span className="text-[1.65rem] leading-tight font-black text-white">{cms?.heroTenure || '12 - 300 months'}</span>
               </div>
             </div>
 
@@ -91,17 +120,18 @@ export const Hero: React.FC<HeroProps> = ({ settings, products, cms, onApplyNow,
               <Lock className="w-3.5 h-3.5 text-sky-200 shrink-0 mt-0.5" />
               <span>{cms?.interestRateDisclaimer || 'Interest rates start from 6% per annum. Final rates depend on eligibility, verification, and lending policies.'}</span>
             </p>
+            </div>
           </div>
 
-          <div className="lg:col-span-6">
-            <form onSubmit={handleSubmit} className="relative rounded-[28px] bg-white text-slate-900 border border-white/20 p-5 sm:p-6 shadow-2xl shadow-blue-950/30 space-y-5">
+          <div className="lg:col-span-6 flex items-center">
+            <form onSubmit={handleSubmit} className="relative w-full rounded-[28px] bg-white text-slate-900 border border-white/20 p-5 sm:p-6 shadow-2xl shadow-blue-950/30 space-y-5">
               <div className="flex items-start justify-between gap-4 border-b border-slate-100 pb-4">
                 <div>
                   <span className="inline-flex items-center gap-1.5 rounded-full bg-blue-50 px-3 py-1 text-[11px] font-extrabold uppercase text-blue-800">
-                    <UserCheck className="w-3.5 h-3.5" /> Step 1 of 5
+                    <UserCheck className="w-3.5 h-3.5" /> Step 1 of 3
                   </span>
                   <h2 className="text-2xl font-black text-slate-950 mt-3">Loan Details</h2>
-                  <p className="text-sm text-slate-500 mt-1">Continue after this step to add personal details and documents.</p>
+                  <p className="text-sm text-slate-500 mt-1">Continue after this step to add personal and banking details.</p>
                 </div>
                 <div className="hidden sm:grid w-12 h-12 rounded-2xl bg-blue-700 text-white place-items-center">
                   <WalletCards className="w-6 h-6" />
@@ -162,7 +192,7 @@ export const Hero: React.FC<HeroProps> = ({ settings, products, cms, onApplyNow,
                   <CheckCircle2 className="w-4 h-4 text-blue-700" /> Admin-managed loan types
                 </div>
                 <div className="rounded-2xl bg-blue-50 border border-blue-100 p-3 flex items-center gap-2">
-                  <FileText className="w-4 h-4 text-blue-700" /> Secure document workflow
+                  <FileText className="w-4 h-4 text-blue-700" /> Simple review and submit
                 </div>
               </div>
             </form>

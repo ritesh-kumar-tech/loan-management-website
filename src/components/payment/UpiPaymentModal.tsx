@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { api } from '../../services/api';
 import { CompanySettings, PaymentSubmission } from '../../types';
 import { formatINR } from '../../utils/calculator';
-import { QrCode, Copy, Check, Upload, ArrowRight, ShieldCheck, AlertCircle, X, Smartphone, FileCheck } from 'lucide-react';
+import { Copy, Check, Upload, AlertCircle, X, Smartphone, FileCheck, Landmark } from 'lucide-react';
 
 interface UpiPaymentModalProps {
   settings: CompanySettings;
@@ -31,6 +31,7 @@ export const UpiPaymentModal: React.FC<UpiPaymentModalProps> = ({
 }) => {
   const [copiedUpi, setCopiedUpi] = useState(false);
   const [copiedAmount, setCopiedAmount] = useState(false);
+  const [copiedBankField, setCopiedBankField] = useState<string | null>(null);
   const [utrNumber, setUtrNumber] = useState('');
   const [proofUrl, setProofUrl] = useState('');
   const [submitting, setSubmitting] = useState(false);
@@ -46,6 +47,13 @@ export const UpiPaymentModal: React.FC<UpiPaymentModalProps> = ({
     navigator.clipboard.writeText(amountPayable.toString());
     setCopiedAmount(true);
     setTimeout(() => setCopiedAmount(false), 2000);
+  };
+
+  const handleCopyBankField = (label: string, value?: string) => {
+    if (!value) return;
+    navigator.clipboard.writeText(value);
+    setCopiedBankField(label);
+    setTimeout(() => setCopiedBankField(null), 2000);
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -155,6 +163,45 @@ export const UpiPaymentModal: React.FC<UpiPaymentModalProps> = ({
                 className="w-36 h-36 object-contain"
               />
               <span className="text-[10px] text-slate-400 font-medium mt-1">Scan using any UPI App</span>
+            </div>
+          </div>
+
+          {/* Bank Transfer Section */}
+          <div className="bg-blue-50 p-5 rounded-2xl border border-blue-100 space-y-4">
+            <div className="flex items-start gap-3">
+              <div className="w-10 h-10 rounded-xl bg-blue-700 text-white grid place-items-center shrink-0">
+                <Landmark className="w-5 h-5" />
+              </div>
+              <div>
+                <h4 className="text-sm font-extrabold text-slate-950">Pay by Bank Transfer</h4>
+                <p className="text-xs text-slate-600 mt-1">Use NEFT, IMPS, or net banking and submit the bank transaction reference below.</p>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              {[
+                ['Account Holder', settings.collectionAccountHolderName || settings.upiAccountName],
+                ['Account Number', settings.collectionAccountNumber],
+                ['IFSC Code', settings.collectionIfscCode],
+                ['Bank Name', settings.collectionBankName],
+              ].map(([label, value]) => (
+                <div key={label} className="rounded-xl bg-white border border-blue-100 p-3 min-w-0">
+                  <span className="block text-[10px] font-extrabold uppercase tracking-wider text-blue-700">{label}</span>
+                  <div className="mt-1 flex items-center justify-between gap-2">
+                    <strong className="text-xs text-slate-950 font-mono break-all">{value || 'Not configured'}</strong>
+                    {value && (
+                      <button
+                        type="button"
+                        onClick={() => handleCopyBankField(label, value)}
+                        className="p-1.5 rounded-lg hover:bg-blue-50 text-slate-500 hover:text-blue-700 cursor-pointer shrink-0"
+                        title={`Copy ${label}`}
+                      >
+                        {copiedBankField === label ? <Check className="w-4 h-4 text-emerald-600" /> : <Copy className="w-4 h-4" />}
+                      </button>
+                    )}
+                  </div>
+                </div>
+              ))}
             </div>
           </div>
 

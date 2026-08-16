@@ -113,32 +113,32 @@ async function runE2ETest() {
     const appId = appRes.body.application.id;
     console.log(`[PASS] Step 1: Application Created successfully: ${appId}`);
 
-    // 2. Track Status Lookup Stage 1 (By Application ID)
+    // 2. Track Status Lookup (By Application ID)
     const trackIdRes = await request('/api/applications/track', {
       method: 'POST',
-      body: JSON.stringify({ identifier: appId, stage: 1 }),
+      body: JSON.stringify({ identifier: appId }),
     });
-    assert.equal(trackIdRes.response.status, 200, 'Track status Stage 1 by App ID returns 200');
-    assert.equal(trackIdRes.body.requiresOtp, true, 'Track status Stage 1 requests OTP');
+    assert.equal(trackIdRes.response.status, 200, 'Track status by App ID returns 200');
+    assert.equal(trackIdRes.body.requiresOtp, false, 'Track status does not require OTP');
+    assert.equal(trackIdRes.body.application.id, appId, 'Application ID lookup returns full application');
     console.log('[PASS] Step 2: Lookup by Application ID succeeded');
 
-    // 3. Track Status Lookup Stage 1 (By Mobile Number with formatting)
+    // 3. Track Status Lookup (By Mobile Number with formatting)
     const trackMobileRes = await request('/api/applications/track', {
       method: 'POST',
-      body: JSON.stringify({ identifier: '+91 98765 01234', stage: 1 }),
+      body: JSON.stringify({ identifier: '+91 98765 01234' }),
     });
-    assert.equal(trackMobileRes.response.status, 200, 'Track status Stage 1 by normalized mobile returns 200');
-    assert.equal(trackMobileRes.body.applicationId, appId, 'Mobile lookup resolves correct Application ID');
+    assert.equal(trackMobileRes.response.status, 200, 'Track status by normalized mobile returns 200');
+    assert.equal(trackMobileRes.body.application.id, appId, 'Mobile lookup resolves correct Application ID');
     console.log('[PASS] Step 3: Mobile number lookup (+91 98765 01234) succeeded');
 
-    // 4. Track Status Stage 2 (Verify OTP)
-    const trackOtpRes = await request('/api/applications/track', {
+    // 4. Track Status Rejects Email Lookup
+    const trackEmailRes = await request('/api/applications/track', {
       method: 'POST',
-      body: JSON.stringify({ identifier: appId, otp: '123456', stage: 2 }),
+      body: JSON.stringify({ identifier: 'vikram.sharma@example.com' }),
     });
-    assert.equal(trackOtpRes.response.status, 200, 'Track status Stage 2 OTP returns 200');
-    assert.equal(trackOtpRes.body.application.id, appId, 'OTP verification returns full application');
-    console.log('[PASS] Step 4: Stage 2 OTP verification succeeded');
+    assert.equal(trackEmailRes.response.status, 400, 'Track status rejects email lookup');
+    console.log('[PASS] Step 4: Email lookup rejected as expected');
 
     // 5. Admin Document Verification
     for (const docId of ['doc_1', 'doc_2', 'doc_3', 'doc_4']) {
@@ -204,7 +204,7 @@ async function runE2ETest() {
     // 10. Customer Tracks Approved Loan Portal & EMI Schedule
     const postApprovalRes = await request('/api/applications/track', {
       method: 'POST',
-      body: JSON.stringify({ identifier: appId, otp: '123456', stage: 2 }),
+      body: JSON.stringify({ identifier: appId }),
     });
     assert.equal(postApprovalRes.body.application.status, 'approved', 'Customer portal reflects approved status');
     assert.ok(postApprovalRes.body.loanAccount?.accountNumber, 'Loan Account generated for customer');

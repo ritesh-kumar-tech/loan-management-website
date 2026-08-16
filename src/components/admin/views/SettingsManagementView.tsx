@@ -121,7 +121,7 @@ export const SettingsManagementView: React.FC<SettingsManagementViewProps> = ({
         {/* UPI Collection & Payment Gateway */}
         <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-2xs space-y-3">
           <h3 className="font-extrabold text-slate-900 border-b border-slate-100 pb-2 text-sm flex items-center gap-2">
-            <QrCode className="w-4 h-4 text-blue-700" /> Official UPI Collection Gateway
+            <QrCode className="w-4 h-4 text-blue-700" /> Official Collection Gateway
           </h3>
 
           <div>
@@ -155,13 +155,44 @@ export const SettingsManagementView: React.FC<SettingsManagementViewProps> = ({
           </div>
 
           <div>
-            <label className="block font-bold text-slate-700 mb-1">Support Email</label>
+            <label className="block font-bold text-slate-700 mb-1">Collection Bank Name</label>
             <input
-              type="email"
-              value={formData.supportEmail}
-              onChange={(e) => handleChange('supportEmail', e.target.value)}
-              className="w-full p-2.5 rounded-xl border border-slate-200"
+              type="text"
+              value={formData.collectionBankName || ''}
+              onChange={(e) => handleChange('collectionBankName', e.target.value)}
+              className="w-full p-2.5 rounded-xl border border-slate-200 font-bold"
             />
+          </div>
+
+          <div>
+            <label className="block font-bold text-slate-700 mb-1">Collection Account Holder Name</label>
+            <input
+              type="text"
+              value={formData.collectionAccountHolderName || ''}
+              onChange={(e) => handleChange('collectionAccountHolderName', e.target.value)}
+              className="w-full p-2.5 rounded-xl border border-slate-200 font-bold"
+            />
+          </div>
+
+          <div className="grid grid-cols-2 gap-2">
+            <div>
+              <label className="block font-bold text-slate-700 mb-1">Collection Account Number</label>
+              <input
+                type="text"
+                value={formData.collectionAccountNumber || ''}
+                onChange={(e) => handleChange('collectionAccountNumber', e.target.value)}
+                className="w-full p-2.5 rounded-xl border border-slate-200 font-mono"
+              />
+            </div>
+            <div>
+              <label className="block font-bold text-slate-700 mb-1">Collection IFSC Code</label>
+              <input
+                type="text"
+                value={formData.collectionIfscCode || ''}
+                onChange={(e) => handleChange('collectionIfscCode', e.target.value.toUpperCase())}
+                className="w-full p-2.5 rounded-xl border border-slate-200 font-mono uppercase"
+              />
+            </div>
           </div>
         </div>
 
@@ -204,6 +235,16 @@ export const SettingsManagementView: React.FC<SettingsManagementViewProps> = ({
               value={formData.registeredAddress}
               onChange={(e) => handleChange('registeredAddress', e.target.value)}
               rows={2}
+              className="w-full p-2.5 rounded-xl border border-slate-200"
+            />
+          </div>
+
+          <div>
+            <label className="block font-bold text-slate-700 mb-1">Support Email</label>
+            <input
+              type="email"
+              value={formData.supportEmail}
+              onChange={(e) => handleChange('supportEmail', e.target.value)}
               className="w-full p-2.5 rounded-xl border border-slate-200"
             />
           </div>

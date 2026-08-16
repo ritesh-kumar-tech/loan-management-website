@@ -301,6 +301,10 @@ export interface CompanySettings {
   upiId: string;
   upiAccountName: string;
   upiQrCodeUrl: string;
+  collectionBankName?: string;
+  collectionAccountNumber?: string;
+  collectionIfscCode?: string;
+  collectionAccountHolderName?: string;
   authorizedSignatoryName: string;
   authorizedSignatoryTitle: string;
   signatureUrl: string;

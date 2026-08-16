@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { api } from './services/api';
-import { CompanySettings, User, LoanProduct, CmsContent, LoanApplication, LoanAccount } from './types';
+import { CompanySettings, User, LoanProduct, CmsContent, LoanApplication, LoanAccount, EmploymentInfo } from './types';
 import { defaultSettings, defaultCmsContent } from './data/mockDatabase';
 import { Header } from './components/layout/Header';
 import { Footer } from './components/layout/Footer';
@@ -35,6 +35,10 @@ export default function App() {
   const [selectedProductIdForWizard, setSelectedProductIdForWizard] = useState<string | undefined>(undefined);
   const [wizardInitialAmount, setWizardInitialAmount] = useState<number | undefined>(undefined);
   const [wizardInitialTenure, setWizardInitialTenure] = useState<number | undefined>(undefined);
+  const [wizardInitialPurpose, setWizardInitialPurpose] = useState<string | undefined>(undefined);
+  const [wizardInitialEmploymentType, setWizardInitialEmploymentType] = useState<EmploymentInfo['employmentType'] | undefined>(undefined);
+  const [wizardInitialMonthlyIncome, setWizardInitialMonthlyIncome] = useState<number | undefined>(undefined);
+  const [wizardInitialExistingEmis, setWizardInitialExistingEmis] = useState<number | undefined>(undefined);
   const getTabFromUrl = (pathname: string) => {
     const path = pathname.toLowerCase();
     if (path.startsWith('/admin')) return 'admin';
@@ -83,6 +87,10 @@ export default function App() {
   useEffect(() => {
     const path = window.location.pathname.toLowerCase();
     if ((path.startsWith('/admin') || activeTab === 'admin') && (!user || user.role !== 'admin')) {
+      setActiveTabState('home');
+      if (window.location.pathname !== '/') {
+        window.history.replaceState({ tab: 'home', loginRequired: true }, '', '/');
+      }
       setShowAuthModal(true);
     }
   }, [user, activeTab]);
@@ -122,10 +130,30 @@ export default function App() {
     restoreVerifiedCustomer();
   }, [activeTab, user, verifiedCustomerApp]);
 
-  const handleStartApplication = (productId?: string, amount?: number, tenure?: number) => {
-    if (productId) setSelectedProductIdForWizard(productId);
-    if (amount) setWizardInitialAmount(amount);
-    if (tenure) setWizardInitialTenure(tenure);
+  const handleStartApplication = (
+    productOrDraft?: string | {
+      productId?: string;
+      amount?: number;
+      tenure?: number;
+      purpose?: string;
+      employmentType?: EmploymentInfo['employmentType'];
+      monthlyIncome?: number;
+      existingEmis?: number;
+    },
+    amount?: number,
+    tenure?: number
+  ) => {
+    const draft = typeof productOrDraft === 'object'
+      ? productOrDraft
+      : { productId: productOrDraft, amount, tenure };
+
+    setSelectedProductIdForWizard(draft.productId);
+    setWizardInitialAmount(draft.amount);
+    setWizardInitialTenure(draft.tenure);
+    setWizardInitialPurpose(draft.purpose);
+    setWizardInitialEmploymentType(draft.employmentType);
+    setWizardInitialMonthlyIncome(draft.monthlyIncome);
+    setWizardInitialExistingEmis(draft.existingEmis);
     
     setActiveTab('apply');
   };
@@ -171,7 +199,7 @@ export default function App() {
               settings={settings}
               products={products}
               cms={cms}
-              onApplyNow={(productId, amount, tenure) => handleStartApplication(productId, amount, tenure)}
+              onApplyNow={(draft) => handleStartApplication(draft)}
               onCalculateEmi={() => setActiveTab('calculator')}
               onNavigate={setActiveTab}
             />
@@ -241,6 +269,10 @@ export default function App() {
             selectedProductId={selectedProductIdForWizard}
             initialAmount={wizardInitialAmount}
             initialTenure={wizardInitialTenure}
+            initialPurpose={wizardInitialPurpose}
+            initialEmploymentType={wizardInitialEmploymentType}
+            initialMonthlyIncome={wizardInitialMonthlyIncome}
+            initialExistingEmis={wizardInitialExistingEmis}
             userId={user?.id || 'usr_guest'}
             userEmail={user?.email || 'guest@example.com'}
             onComplete={() => setActiveTab('track', '/track-status')}

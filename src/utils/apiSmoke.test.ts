@@ -71,16 +71,22 @@ try {
 
   const trackById = await request('/api/applications/track', {
     method: 'POST',
-    body: JSON.stringify({ identifier: 'LN-2026-000101', otp: '123456' }),
+    body: JSON.stringify({ identifier: 'LN-2026-000101' }),
   });
-  assert.equal(trackById.response.status, 200, 'tracking by application ID succeeds with OTP');
+  assert.equal(trackById.response.status, 200, 'tracking by application ID succeeds without OTP');
   assert.equal(trackById.body.application.personalInfo.panNumber, '*****', 'public tracking masks PAN');
 
   const trackByMobile = await request('/api/applications/track', {
     method: 'POST',
-    body: JSON.stringify({ identifier: '9876543210', otp: '123456' }),
+    body: JSON.stringify({ identifier: '9876543210' }),
   });
-  assert.equal(trackByMobile.response.status, 200, 'tracking by mobile succeeds with OTP');
+  assert.equal(trackByMobile.response.status, 200, 'tracking by mobile succeeds without OTP');
+
+  const trackByEmail = await request('/api/applications/track', {
+    method: 'POST',
+    body: JSON.stringify({ identifier: 'aniket.verma@example.com' }),
+  });
+  assert.equal(trackByEmail.response.status, 400, 'tracking by email is rejected');
 
   const dashboard = await request('/api/admin/dashboard/summary');
   assert.equal(dashboard.response.status, 200, 'admin dashboard summary returns 200');

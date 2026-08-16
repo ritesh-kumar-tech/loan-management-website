@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { api } from '../../services/api';
 import { LoanApplication, LoanAccount, CompanySettings } from '../../types';
 import { formatINR, formatDate } from '../../utils/calculator';
-import { Search, Clock, CheckCircle2, AlertCircle, FileText, ArrowRight, ShieldCheck, Download, KeyRound, Lock, UserCheck } from 'lucide-react';
+import { Search, AlertCircle, ArrowRight, Download } from 'lucide-react';
 import { generateApplicationAcknowledgement, generateSanctionLetter } from '../../utils/pdfGenerator';
 import { StatusBadge } from '../shared/StatusBadge';
 import { getStatusMeta } from '../../utils/statusConfig';
@@ -14,16 +14,12 @@ interface StatusTrackerProps {
 
 export const StatusTracker: React.FC<StatusTrackerProps> = ({ settings, onVerifiedCustomer }) => {
   const [identifierInput, setIdentifierInput] = useState('');
-  const [otpInput, setOtpInput] = useState('');
-  const [stage, setStage] = useState<1 | 2>(1);
   const [loading, setLoading] = useState(false);
-  const [lookupInfo, setLookupInfo] = useState<{ applicationId: string; maskedMobile: string; applicantName?: string; message?: string } | null>(null);
   const [application, setApplication] = useState<LoanApplication | null>(null);
   const [loanAccount, setLoanAccount] = useState<LoanAccount | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  // Stage 1: Verify application exists by ID or Mobile
-  const handleStage1Lookup = async (e: React.FormEvent) => {
+  const handleLookup = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!identifierInput.trim()) {
       setError('Please enter your Application ID or registered mobile number.');
@@ -35,42 +31,6 @@ export const StatusTracker: React.FC<StatusTrackerProps> = ({ settings, onVerifi
     try {
       const res = await api.trackApplication({
         identifier: identifierInput.trim(),
-        stage: 1,
-      });
-
-      if (res.success && res.requiresOtp) {
-        setLookupInfo({
-          applicationId: res.applicationId || identifierInput.trim(),
-          maskedMobile: res.maskedMobile || '******',
-          applicantName: res.applicantName,
-          message: res.message,
-        });
-        setStage(2);
-      } else {
-        setError(res.error || "We couldn't find an application with those details.");
-      }
-    } catch {
-      setError("We couldn't send the OTP. Please try again.");
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  // Stage 2: Verify OTP
-  const handleStage2VerifyOtp = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!otpInput.trim()) {
-      setError('Please enter the 6-digit OTP.');
-      return;
-    }
-    setLoading(true);
-    setError(null);
-
-    try {
-      const res = await api.trackApplication({
-        identifier: identifierInput.trim(),
-        otp: otpInput.trim(),
-        stage: 2,
       });
 
       if (res.success && res.application) {
@@ -80,18 +40,16 @@ export const StatusTracker: React.FC<StatusTrackerProps> = ({ settings, onVerifi
           onVerifiedCustomer(res.application, res.loanAccount);
         }
       } else {
-        setError(res.error || 'The OTP is incorrect or has expired.');
+        setError(res.error || "We couldn't find an application with those details.");
       }
     } catch {
-      setError('The OTP is incorrect or has expired.');
+      setError("We couldn't find an application with those details.");
     } finally {
       setLoading(false);
     }
   };
 
   const handleReset = () => {
-    setStage(1);
-    setLookupInfo(null);
     setApplication(null);
     setLoanAccount(null);
     setError(null);
@@ -104,29 +62,28 @@ export const StatusTracker: React.FC<StatusTrackerProps> = ({ settings, onVerifi
           <Search className="w-3.5 h-3.5" /> Customer Loan Tracking Portal
         </div>
         <h1 className="text-3xl font-extrabold text-slate-900">Track Loan Application Status</h1>
-        <p className="mt-2 text-sm text-slate-600">Enter your Application ID, registered email, or registered mobile number to receive an email OTP and view your application status.</p>
+        <p className="mt-2 text-sm text-slate-600">Enter your Application ID or registered mobile number to view your application status.</p>
       </div>
 
       <div className="bg-white p-6 sm:p-8 rounded-3xl border border-slate-200 shadow-md mb-8">
-        {stage === 1 ? (
-          /* STAGE 1 FORM */
-          <form onSubmit={handleStage1Lookup} className="space-y-4">
+        {!application && (
+          <form onSubmit={handleLookup} className="space-y-4">
             <div>
               <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-2">
-                Application ID, Registered Email, or Mobile Number *
+                Application ID or Registered Mobile Number *
               </label>
               <div className="relative">
                 <input
                   type="text"
                   required
-                  placeholder="e.g. LN-2026-000101, name@email.com, or 9876543210"
+                  placeholder="e.g. LN-2026-000101 or 9876543210"
                   value={identifierInput}
                   onChange={(e) => setIdentifierInput(e.target.value)}
                   className="w-full pl-4 pr-10 py-3.5 rounded-xl border border-slate-300 focus:ring-2 focus:ring-slate-900 focus:outline-hidden text-sm font-semibold text-slate-900"
                 />
                 <Search className="w-5 h-5 text-slate-400 absolute right-3.5 top-3.5 pointer-events-none" />
               </div>
-              <span className="text-[11px] text-slate-500 mt-1 block">You do not need to register or log in with password to track your application.</span>
+              <span className="text-[11px] text-slate-500 mt-1 block">Use only your application ID or the mobile number used in the application.</span>
             </div>
 
             <button
@@ -134,58 +91,8 @@ export const StatusTracker: React.FC<StatusTrackerProps> = ({ settings, onVerifi
               disabled={loading}
               className="w-full py-3.5 px-4 rounded-xl bg-slate-900 hover:bg-slate-800 text-white font-bold text-sm transition-all shadow-md flex items-center justify-center gap-2 cursor-pointer"
             >
-              {loading ? 'Checking Application Database...' : <><Search className="w-4 h-4" /> Find Application & Send OTP <ArrowRight className="w-4 h-4" /></>}
+              {loading ? 'Checking Application Database...' : <><Search className="w-4 h-4" /> Track Application <ArrowRight className="w-4 h-4" /></>}
             </button>
-          </form>
-        ) : (
-          /* STAGE 2 FORM */
-          <form onSubmit={handleStage2VerifyOtp} className="space-y-4 animate-fade-in">
-            <div className="p-4 rounded-2xl bg-sky-50 border border-sky-200 text-sky-900 text-xs flex items-start gap-3">
-              <UserCheck className="w-5 h-5 text-sky-700 shrink-0 mt-0.5" />
-              <div>
-                <strong className="font-bold text-sky-950 block text-sm mb-0.5">
-                  Application Found: {lookupInfo?.applicantName || lookupInfo?.applicationId}
-                </strong>
-                <p>A 6-digit OTP has been sent to the registered email <strong>{lookupInfo?.maskedMobile}</strong>. Enter it below to access your loan status portal.</p>
-              </div>
-            </div>
-
-            <div>
-              <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-2">
-                Enter 6-Digit Verification OTP *
-              </label>
-              <div className="relative">
-                <input
-                  type="text"
-                  required
-                  maxLength={6}
-                  inputMode="numeric"
-                  placeholder="Enter OTP"
-                  value={otpInput}
-                  onChange={(e) => setOtpInput(e.target.value)}
-                  className="w-full pl-4 pr-10 py-3.5 rounded-xl border border-slate-300 focus:ring-2 focus:ring-slate-900 focus:outline-hidden text-lg font-bold tracking-widest text-slate-900 font-mono"
-                />
-                <KeyRound className="w-5 h-5 text-slate-400 absolute right-3.5 top-3.5 pointer-events-none" />
-              </div>
-              <span className="text-[11px] text-slate-500 mt-1 block">The OTP expires in 5 minutes and can be used only once. Demo OTP: <strong>123456</strong>.</span>
-            </div>
-
-            <div className="flex flex-col sm:flex-row gap-3 pt-2">
-              <button
-                type="submit"
-                disabled={loading}
-                className="flex-1 py-3.5 px-4 rounded-xl bg-blue-700 hover:bg-blue-800 text-white font-bold text-sm transition-all shadow-md flex items-center justify-center gap-2 cursor-pointer"
-              >
-                {loading ? 'Verifying OTP...' : <><ShieldCheck className="w-4 h-4" /> Verify OTP & Open Customer Portal</>}
-              </button>
-              <button
-                type="button"
-                onClick={handleReset}
-                className="px-4 py-3.5 rounded-xl border border-slate-300 hover:bg-slate-50 text-slate-700 font-bold text-xs cursor-pointer"
-              >
-                Back / Search Again
-              </button>
-            </div>
           </form>
         )}
 
@@ -208,6 +115,12 @@ export const StatusTracker: React.FC<StatusTrackerProps> = ({ settings, onVerifi
             </div>
             <div className="flex items-center gap-3">
               <StatusBadge status={application.status} />
+              <button
+                onClick={handleReset}
+                className="px-4 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-800 font-bold text-xs flex items-center gap-2 cursor-pointer"
+              >
+                Search Again
+              </button>
               {onVerifiedCustomer && (
                 <button
                   onClick={() => onVerifiedCustomer(application, loanAccount || undefined)}
