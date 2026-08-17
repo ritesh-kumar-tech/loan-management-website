@@ -34,8 +34,26 @@ export const UpiPaymentModal: React.FC<UpiPaymentModalProps> = ({
   const [copiedBankField, setCopiedBankField] = useState<string | null>(null);
   const [utrNumber, setUtrNumber] = useState('');
   const [proofUrl, setProofUrl] = useState('');
+  const [uploadingProof, setUploadingProof] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const handleProofFileSelect = async (file: File) => {
+    setError(null);
+    setUploadingProof(true);
+    try {
+      const result = await api.uploadFile(file);
+      if (!result.success || !result.fileUrl) {
+        setError(result.error || 'Screenshot upload failed. You can still submit without it.');
+        return;
+      }
+      setProofUrl(result.fileUrl);
+    } catch {
+      setError('Screenshot upload failed. You can still submit without it.');
+    } finally {
+      setUploadingProof(false);
+    }
+  };
 
   const handleCopyUpi = () => {
     navigator.clipboard.writeText(settings.upiId);
@@ -75,7 +93,7 @@ export const UpiPaymentModal: React.FC<UpiPaymentModalProps> = ({
         amount: amountPayable,
         purpose,
         utrNumber: utrNumber.trim().toUpperCase(),
-        proofScreenshotUrl: proofUrl || 'https://images.unsplash.com/photo-1559526324-4b87b5e36e44?w=400&h=600&fit=crop',
+        proofScreenshotUrl: proofUrl || undefined,
         installmentNumber,
       });
 
@@ -236,17 +254,17 @@ export const UpiPaymentModal: React.FC<UpiPaymentModalProps> = ({
                   accept="image/*"
                   onChange={(e) => {
                     const file = e.target.files?.[0];
-                    if (file) {
-                      setProofUrl(URL.createObjectURL(file));
-                    }
+                    if (file) handleProofFileSelect(file);
                   }}
                   className="hidden"
                   id="screenshot-file"
+                  disabled={uploadingProof}
                 />
                 <label htmlFor="screenshot-file" className="mt-2 inline-block px-3 py-1 rounded-lg bg-white border border-slate-300 text-xs font-semibold text-slate-700 cursor-pointer">
                   Select Screenshot Image
                 </label>
-                {proofUrl && <span className="text-xs text-emerald-600 font-bold block mt-1">✓ File Attached</span>}
+                {uploadingProof && <span className="text-xs text-blue-600 font-bold block mt-1">Uploading...</span>}
+                {!uploadingProof && proofUrl && <span className="text-xs text-emerald-600 font-bold block mt-1">✓ File Attached</span>}
               </div>
             </div>
 
@@ -258,7 +276,7 @@ export const UpiPaymentModal: React.FC<UpiPaymentModalProps> = ({
 
             <button
               type="submit"
-              disabled={submitting}
+              disabled={submitting || uploadingProof}
               className="w-full py-3 px-4 rounded-xl bg-blue-700 hover:bg-blue-800 text-white font-bold text-sm transition-all shadow-md flex items-center justify-center gap-2 cursor-pointer"
             >
               {submitting ? 'Submitting Payment Proof...' : <><FileCheck className="w-4 h-4" /> Submit Payment for Verification</>}

@@ -68,13 +68,18 @@ export const Hero: React.FC<HeroProps> = ({ settings, products, cms, onApplyNow,
           <div
             className="relative overflow-hidden lg:col-span-6 rounded-[28px] border border-white/15 px-5 py-7 sm:px-8 lg:px-9 lg:py-10 shadow-2xl shadow-blue-950/25 min-h-[620px] animate-[fadeUp_.6s_ease-out_both]"
             style={{
-              backgroundImage: `linear-gradient(90deg, rgba(7, 27, 61, 0.98) 0%, rgba(7, 27, 61, 0.9) 44%, rgba(7, 48, 111, 0.58) 100%), url("${heroBackgroundImage}")`,
+              // Previously stacked three dark layers on top of this photo (a
+              // 98%-opacity gradient here, a second 90%-opacity gradient div,
+              // plus a dot-pattern overlay) - combined they left the image
+              // almost fully hidden behind navy. Lightened so it's actually
+              // visible, especially on the right where the text isn't.
+              backgroundImage: `linear-gradient(90deg, rgba(7, 27, 61, 0.88) 0%, rgba(7, 27, 61, 0.55) 50%, rgba(7, 48, 111, 0.22) 100%), url("${heroBackgroundImage}")`,
               backgroundSize: 'cover',
               backgroundPosition: 'center right',
             }}
           >
-            <div className="absolute inset-0 bg-gradient-to-t from-[#071B3D]/90 via-transparent to-[#071B3D]/30" />
-            <div className="absolute inset-0 opacity-[0.16] bg-[radial-gradient(#ffffff_1px,transparent_1px)] [background-size:18px_18px]" />
+            <div className="absolute inset-0 bg-gradient-to-t from-[#071B3D]/45 via-transparent to-[#071B3D]/10" />
+            <div className="absolute inset-0 opacity-[0.12] bg-[radial-gradient(#ffffff_1px,transparent_1px)] [background-size:18px_18px]" />
             <div className="relative z-10 h-full flex flex-col justify-center space-y-6 text-center lg:text-left">
             <div className="inline-flex w-fit mx-auto lg:mx-0 items-center gap-2 px-4 py-2 rounded-full bg-white/12 border border-white/25 text-blue-50 text-xs font-bold uppercase tracking-wider backdrop-blur">
               <ShieldCheck className="w-4 h-4 text-sky-200" />

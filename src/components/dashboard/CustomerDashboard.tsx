@@ -61,24 +61,27 @@ export const CustomerDashboard: React.FC<CustomerDashboardProps> = ({
         const [apps, loans, pays, tkts] = await Promise.all([
           api.getApplications(user.id),
           api.getLoanAccounts(user.id),
-          api.getPayments(),
-          api.getSupportTickets(),
+          api.getPayments({ userId: user.id }),
+          api.getSupportTickets(user.id),
         ]);
         setApplications(apps);
         setLoanAccounts(loans);
-        setPayments(pays.filter((p) => p.userId === user.id));
-        setTickets(tkts.filter((t) => t.userId === user.id));
+        setPayments(pays);
+        setTickets(tkts);
       } else if (verifiedApplication) {
-        const [apps, loans, pays] = await Promise.all([
-          api.getApplications(),
-          api.getLoanAccounts(),
-          api.getPayments(),
+        // Not logged in: the customer only proved ownership of one application via
+        // /api/applications/track (App ID or mobile match), so re-use that same
+        // scoped, masked lookup to refresh instead of fetching every application
+        // and loan account in the system and filtering client-side.
+        const [trackResult, pays] = await Promise.all([
+          api.trackApplication({ identifier: verifiedApplication.id }),
+          api.getPayments({ applicationId: verifiedApplication.id }),
         ]);
-        const appMatches = apps.filter((a) => a.id === verifiedApplication.id || a.personalInfo?.mobile === verifiedApplication.personalInfo?.mobile);
-        const matchingLoans = loans.filter((l) => l.applicationId === verifiedApplication.id || (verifiedLoanAccount && l.accountNumber === verifiedLoanAccount.accountNumber));
-        setApplications(appMatches.length ? appMatches : [verifiedApplication]);
-        setLoanAccounts(matchingLoans.length ? matchingLoans : (verifiedLoanAccount ? [verifiedLoanAccount] : []));
-        setPayments(pays.filter((p) => p.applicationId === verifiedApplication.id));
+        const refreshedApp = trackResult.application || verifiedApplication;
+        const refreshedLoan = trackResult.loanAccount || verifiedLoanAccount || null;
+        setApplications([refreshedApp]);
+        setLoanAccounts(refreshedLoan ? [refreshedLoan] : []);
+        setPayments(pays);
       }
     } catch (e) {
       console.error(e);

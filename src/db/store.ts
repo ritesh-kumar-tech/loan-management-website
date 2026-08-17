@@ -351,6 +351,12 @@ export const getCollections = () => ({
   eligibilityRules: tableData<AnyRecord>('eligibility_rules'),
 });
 
+export const applicationIdExists = (id: string): boolean => {
+  const db = getDb();
+  const row = db.prepare('SELECT 1 FROM applications WHERE id = ?').get(id);
+  return Boolean(row);
+};
+
 export const findUserAuthByEmail = (email: string) => {
   const db = getDb();
   return db

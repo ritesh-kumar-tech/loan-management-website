@@ -6,9 +6,12 @@ const baseUrl = process.env.TEST_BASE_URL || 'http://localhost:3000';
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 const request = async (path: string, options: RequestInit = {}) => {
+  // `headers` must be merged AFTER spreading `options` - otherwise a caller-supplied
+  // `headers` object (e.g. an Authorization header) replaces this Content-Type
+  // entirely instead of merging with it, and POST bodies stop being parsed server-side.
   const response = await fetch(`${baseUrl}${path}`, {
-    headers: { 'Content-Type': 'application/json', ...(options.headers || {}) },
     ...options,
+    headers: { 'Content-Type': 'application/json', ...(options.headers || {}) },
   });
   let body: any = null;
   try {
@@ -53,6 +56,23 @@ try {
   });
   assert.equal(adminLogin.response.status, 200, 'admin login succeeds');
   assert.equal(adminLogin.body.user.role, 'admin', 'admin login returns admin role');
+  assert.ok(adminLogin.body.token, 'admin login returns a session token');
+  const adminAuthHeader = { Authorization: `Bearer ${adminLogin.body.token}` };
+
+  const anonymousApplicationsList = await request('/api/applications');
+  assert.equal(anonymousApplicationsList.response.status, 401, 'listing all applications without a token is rejected');
+
+  const adminApplicationsList = await request('/api/applications', { headers: adminAuthHeader });
+  assert.equal(adminApplicationsList.response.status, 200, 'listing all applications with an admin token succeeds');
+
+  const anonymousDashboard = await request('/api/admin/dashboard/summary');
+  assert.equal(anonymousDashboard.response.status, 401, 'dashboard summary without a token is rejected');
+
+  const anonymousStatusChange = await request('/api/applications/LN-2026-000101/status', {
+    method: 'PATCH',
+    body: JSON.stringify({ status: 'approved' }),
+  });
+  assert.equal(anonymousStatusChange.response.status, 401, 'changing application status without a token is rejected');
 
   const badPassword = await request('/api/auth/login', {
     method: 'POST',
@@ -88,8 +108,8 @@ try {
   });
   assert.equal(trackByEmail.response.status, 400, 'tracking by email is rejected');
 
-  const dashboard = await request('/api/admin/dashboard/summary');
-  assert.equal(dashboard.response.status, 200, 'admin dashboard summary returns 200');
+  const dashboard = await request('/api/admin/dashboard/summary', { headers: adminAuthHeader });
+  assert.equal(dashboard.response.status, 200, 'admin dashboard summary returns 200 with an admin token');
   assert.equal(typeof dashboard.body.summary.totalOutstanding, 'number', 'dashboard summary exposes numeric outstanding total');
 
   const duplicatePayment = await request('/api/payments/submit', {
@@ -103,7 +123,7 @@ try {
       utrNumber: 'UTR402910839120',
     }),
   });
-  assert.equal(duplicatePayment.response.status, 400, 'duplicate UTR is rejected');
+  assert.equal(duplicatePayment.response.status, 409, 'duplicate UTR is rejected as a conflict');
 
   console.log('api smoke tests passed');
 } finally {

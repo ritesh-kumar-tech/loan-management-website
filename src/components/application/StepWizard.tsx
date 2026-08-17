@@ -100,6 +100,7 @@ export const StepWizard: React.FC<StepWizardProps> = ({
   ]);
   const [previewDoc, setPreviewDoc] = useState<ApplicationDocument | null>(null);
   const [uploadError, setUploadError] = useState<string | null>(null);
+  const [uploadingDocType, setUploadingDocType] = useState<string | null>(null);
   const [stepError, setStepError] = useState<string | null>(null);
 
   // Consents
@@ -119,7 +120,7 @@ export const StepWizard: React.FC<StepWizardProps> = ({
     const clean = String(value || '').replace(/\s/g, '');
     return clean.length > 4 ? `${'*'.repeat(Math.max(4, clean.length - 4))}${clean.slice(-4)}` : clean || '-';
   };
-  const fileSize = (url?: string) => url?.startsWith('blob:') ? 'Uploaded file' : 'Ready';
+  const fileSize = (url?: string) => (url ? 'Uploaded to server' : 'Ready');
   const formatEmployment = (value: string) => value.replace(/_/g, ' ').replace(/\b\w/g, (char) => char.toUpperCase());
 
   const validateStep = (step: number): boolean => {
@@ -219,7 +220,7 @@ export const StepWizard: React.FC<StepWizardProps> = ({
     }
   };
 
-  const handleDocumentUpload = (docType: string, title: string, file: File) => {
+  const handleDocumentUpload = async (docType: string, title: string, file: File) => {
     setUploadError(null);
     const allowedTypes = ['application/pdf', 'image/jpeg', 'image/png'];
     const allowedExtensions = ['pdf', 'jpg', 'jpeg', 'png'];
@@ -232,23 +233,34 @@ export const StepWizard: React.FC<StepWizardProps> = ({
       setUploadError('Each document must be 5 MB or smaller.');
       return;
     }
-    const newDoc: ApplicationDocument = {
-      id: `doc_${Date.now()}`,
-      docType,
-      title,
-      fileName: file.name,
-      fileUrl: URL.createObjectURL(file),
-      uploadedAt: new Date().toISOString(),
-      status: 'pending',
-    };
-    setDocuments([...documents.filter((d) => d.docType !== docType), newDoc]);
+    setUploadingDocType(docType);
+    try {
+      const result = await api.uploadFile(file);
+      if (!result.success || !result.fileUrl) {
+        setUploadError(result.error || 'Upload failed. Please try again.');
+        return;
+      }
+      const newDoc: ApplicationDocument = {
+        id: `doc_${Date.now()}`,
+        docType,
+        title,
+        fileName: file.name,
+        fileUrl: result.fileUrl,
+        uploadedAt: new Date().toISOString(),
+        status: 'pending',
+      };
+      setDocuments([...documents.filter((d) => d.docType !== docType), newDoc]);
+    } catch {
+      setUploadError('Upload failed. Please check your connection and try again.');
+    } finally {
+      setUploadingDocType(null);
+    }
   };
 
   const handleRemoveDocument = (docType: string) => {
     const doc = documents.find((d) => d.docType === docType);
     if (!doc) return;
     if (!window.confirm("Remove this document? You'll need to upload it again before submitting.")) return;
-    if (doc.fileUrl?.startsWith('blob:')) URL.revokeObjectURL(doc.fileUrl);
     setDocuments(documents.filter((d) => d.docType !== docType));
     if (previewDoc?.docType === docType) setPreviewDoc(null);
   };
@@ -635,6 +647,11 @@ export const StepWizard: React.FC<StepWizardProps> = ({
                           </button>
                         </div>
                       </div>
+                    ) : uploadingDocType === docItem.type ? (
+                      <div className="block p-3 rounded-lg border border-dashed border-blue-300 bg-blue-50 text-center">
+                        <Upload className="w-4 h-4 text-blue-500 mx-auto mb-1 animate-pulse" />
+                        <span className="text-xs text-blue-700 font-medium block">Uploading...</span>
+                      </div>
                     ) : (
                       <label className="block p-3 rounded-lg border border-dashed border-slate-300 bg-white text-center cursor-pointer hover:bg-slate-100 transition-colors">
                         <Upload className="w-4 h-4 text-slate-400 mx-auto mb-1" />
@@ -827,7 +844,7 @@ export const StepWizard: React.FC<StepWizardProps> = ({
                 <button onClick={() => setPreviewDoc(null)} className="px-3 py-1.5 rounded-lg bg-slate-100 text-xs font-bold cursor-pointer">Close</button>
               </div>
               <div className="p-4 bg-slate-50 max-h-[75vh] overflow-auto">
-                {(previewDoc.fileUrl.match(/\.(png|jpe?g|webp|gif)$/i) || (previewDoc.fileUrl.startsWith('blob:') && previewDoc.fileName.match(/\.(png|jpe?g)$/i))) ? (
+                {previewDoc.fileUrl.match(/\.(png|jpe?g|webp|gif)$/i) ? (
                   <img src={previewDoc.fileUrl} alt={previewDoc.title} className="max-h-[70vh] mx-auto rounded-xl border border-slate-200 bg-white object-contain" />
                 ) : (
                   <iframe title={previewDoc.title} src={previewDoc.fileUrl} className="w-full h-[70vh] rounded-xl border border-slate-200 bg-white" />

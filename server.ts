@@ -2,10 +2,14 @@ import 'dotenv/config';
 import express from 'express';
 import crypto from 'crypto';
 import path from 'path';
+import fs from 'fs';
+import multer from 'multer';
 import { createServer as createViteServer } from 'vite';
 import { calculateEmi, calculateFOIR } from './src/utils/calculator';
+import { APPLICATION_STATUSES } from './src/utils/statusConfig';
 import { ApplicationStatus, AppNotification, EligibilityResult, LoanApplication, Receipt, SupportTicket } from './src/types';
 import {
+  applicationIdExists,
   findUserAuthByEmail,
   getCollections,
   initializeDatabase,
@@ -38,10 +42,87 @@ interface CreateAppOptions {
   serveClient?: boolean;
 }
 
+// ---------------- FILE UPLOAD STORAGE ----------------
+// Documents (KYC files) and payment-proof screenshots were previously only ever
+// held as browser blob: URLs, which never leave the uploading tab - they are not
+// retrievable after a refresh, by the admin, or from any other session, even
+// though the UI showed a green "Uploaded" state. This gives uploads real,
+// server-side, on-disk persistence.
+const uploadsDir = path.join(process.cwd(), 'data', 'uploads');
+fs.mkdirSync(uploadsDir, { recursive: true });
+
+const ALLOWED_UPLOAD_MIME_TYPES = new Set(['application/pdf', 'image/jpeg', 'image/png']);
+const ALLOWED_UPLOAD_EXTENSIONS = new Set(['.pdf', '.jpg', '.jpeg', '.png']);
+const MAX_UPLOAD_BYTES = 5 * 1024 * 1024;
+
+const upload = multer({
+  storage: multer.diskStorage({
+    destination: (req, file, cb) => cb(null, uploadsDir),
+    // The stored filename is always server-generated (never the client-supplied
+    // originalname) so a crafted filename like "../../server.ts" can't escape
+    // the uploads directory or overwrite another file.
+    filename: (req, file, cb) => {
+      const ext = path.extname(file.originalname).toLowerCase();
+      cb(null, `${crypto.randomUUID()}${ALLOWED_UPLOAD_EXTENSIONS.has(ext) ? ext : ''}`);
+    },
+  }),
+  limits: { fileSize: MAX_UPLOAD_BYTES },
+  fileFilter: (req, file, cb) => {
+    const ext = path.extname(file.originalname).toLowerCase();
+    if (!ALLOWED_UPLOAD_MIME_TYPES.has(file.mimetype) || !ALLOWED_UPLOAD_EXTENSIONS.has(ext)) {
+      cb(new Error('Only PDF, JPG, JPEG, and PNG files are allowed.'));
+      return;
+    }
+    cb(null, true);
+  },
+});
+
+// Server-generated UUID filenames (see above) - anything else is rejected
+// outright before it ever reaches the filesystem.
+const UPLOAD_FILENAME_PATTERN = /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}(\.[a-z0-9]{1,5})?$/i;
+
 export async function createApp({ serveClient = true }: CreateAppOptions = {}) {
   const app = express();
 
   app.use(express.json({ limit: '10mb' }));
+
+  // Document/payment-proof upload. Kept unauthenticated to match this app's
+  // existing pattern for customer-submitted artifacts (same trust model as
+  // application creation itself); the returned URL is an unguessable UUID.
+  app.post('/api/uploads', (req, res) => {
+    upload.single('file')(req, res, (err: unknown) => {
+      if (err) {
+        const message = err instanceof multer.MulterError && err.code === 'LIMIT_FILE_SIZE'
+          ? 'Each file must be 5 MB or smaller.'
+          : err instanceof Error ? err.message : 'File upload failed.';
+        res.status(400).json({ success: false, error: message });
+        return;
+      }
+      if (!req.file) {
+        res.status(400).json({ success: false, error: 'No file was uploaded.' });
+        return;
+      }
+      res.json({
+        success: true,
+        fileUrl: `/api/uploads/${req.file.filename}`,
+        fileName: req.file.originalname,
+      });
+    });
+  });
+
+  app.get('/api/uploads/:filename', (req, res) => {
+    const { filename } = req.params;
+    if (!UPLOAD_FILENAME_PATTERN.test(filename)) {
+      res.status(400).json({ success: false, error: 'Invalid file reference.' });
+      return;
+    }
+    const filePath = path.join(uploadsDir, filename);
+    if (!filePath.startsWith(uploadsDir) || !fs.existsSync(filePath)) {
+      res.status(404).json({ success: false, error: 'File not found.' });
+      return;
+    }
+    res.sendFile(filePath);
+  });
 
   await initializeDatabase();
   const collections = await getCollections();
@@ -185,6 +266,84 @@ export async function createApp({ serveClient = true }: CreateAppOptions = {}) {
     return true;
   };
 
+  // ---------------- SESSION AUTH ----------------
+  // Signed, stateless session tokens (HMAC-SHA256). Replaces the previous placeholder
+  // `jwt_token_<id>_<timestamp>` string, which was never verified anywhere and let any
+  // caller invoke admin-only endpoints without any credentials at all.
+  const SESSION_SECRET = process.env.SESSION_SECRET || 'dhani-local-session-secret-change-in-production';
+  const SESSION_TTL_MS = 12 * 60 * 60 * 1000; // 12 hours
+
+  type SessionPayload = { id: string; role: string; exp: number };
+
+  const base64url = (buf: Buffer) => buf.toString('base64url');
+
+  const signSessionToken = (payload: { id: string; role: string }): string => {
+    const body = base64url(Buffer.from(JSON.stringify({ ...payload, exp: Date.now() + SESSION_TTL_MS })));
+    const signature = base64url(crypto.createHmac('sha256', SESSION_SECRET).update(body).digest());
+    return `${body}.${signature}`;
+  };
+
+  const verifySessionToken = (token: string): SessionPayload | null => {
+    const [body, signature] = String(token || '').split('.');
+    if (!body || !signature) return null;
+    const expectedSignature = base64url(crypto.createHmac('sha256', SESSION_SECRET).update(body).digest());
+    const provided = Buffer.from(signature);
+    const expected = Buffer.from(expectedSignature);
+    if (provided.length !== expected.length || !crypto.timingSafeEqual(provided, expected)) return null;
+    try {
+      const payload = JSON.parse(Buffer.from(body, 'base64url').toString('utf8')) as SessionPayload;
+      if (!payload?.exp || Date.now() > payload.exp) return null;
+      return payload;
+    } catch {
+      return null;
+    }
+  };
+
+  const getSessionFromRequest = (req: express.Request): SessionPayload | null => {
+    const header = req.headers.authorization || '';
+    const token = header.startsWith('Bearer ') ? header.slice(7).trim() : '';
+    return token ? verifySessionToken(token) : null;
+  };
+
+  const requireRole = (...roles: string[]) => (req: express.Request, res: express.Response, next: express.NextFunction) => {
+    const session = getSessionFromRequest(req);
+    if (!session || (roles.length > 0 && !roles.includes(session.role))) {
+      res.status(401).json({ success: false, error: 'Authentication required for this action.' });
+      return;
+    }
+    (req as any).authUser = session;
+    next();
+  };
+
+  // Lightweight in-memory rate limiter for brute-force / enumeration protection on
+  // public endpoints (login, application tracking). Not distributed-safe, but this
+  // server already keeps all other state (OTP records, in-memory collections) the
+  // same way, so it matches the existing architecture rather than adding new infra.
+  const rateLimitHits = new Map<string, { count: number; windowStart: number }>();
+  const checkRateLimit = (key: string, limit: number, windowMs: number): boolean => {
+    const nowMs = Date.now();
+    const entry = rateLimitHits.get(key);
+    if (!entry || nowMs - entry.windowStart > windowMs) {
+      rateLimitHits.set(key, { count: 1, windowStart: nowMs });
+      return true;
+    }
+    entry.count += 1;
+    return entry.count <= limit;
+  };
+
+  // Wraps an async route handler so a thrown/rejected error becomes a logged 500
+  // response instead of an unhandled promise rejection (Express 4 does not catch
+  // async errors automatically).
+  const ah = (fn: (req: express.Request, res: express.Response) => Promise<void>) =>
+    (req: express.Request, res: express.Response) => {
+      Promise.resolve(fn(req, res)).catch((error) => {
+        console.error(`Unhandled error on ${req.method} ${req.path}:`, error);
+        if (!res.headersSent) {
+          res.status(500).json({ success: false, error: 'An unexpected server error occurred. Please try again.' });
+        }
+      });
+    };
+
   // ---------------- API ROUTES ----------------
 
   // Health check
@@ -197,12 +356,12 @@ export async function createApp({ serveClient = true }: CreateAppOptions = {}) {
     res.json({ success: true, settings });
   });
 
-  app.post('/api/settings', (req, res) => {
+  app.post('/api/settings', requireRole('admin'), ah(async (req, res) => {
     settings = { ...settings, ...req.body };
-    saveSettings(settings);
+    await saveSettings(settings);
     addAuditLog('usr_admin_1', 'admin', 'admin@dhanifinance.in', 'SETTINGS_UPDATED', 'CompanySettings', 'global', 'Updated company branding settings');
     res.json({ success: true, settings });
-  });
+  }));
 
   app.post('/api/otp/send', async (req, res) => {
     const { identifier, purpose } = req.body;
@@ -249,10 +408,16 @@ export async function createApp({ serveClient = true }: CreateAppOptions = {}) {
   });
 
   // Auth: Login
-  app.post('/api/auth/login', async (req, res) => {
+  app.post('/api/auth/login', ah(async (req, res) => {
     const { email, password, role } = req.body;
     if (!email || !password) {
       res.status(400).json({ success: false, error: 'Email and password are required.' });
+      return;
+    }
+
+    const rateLimitKey = `login:${normalizeIdentifier(email)}`;
+    if (!checkRateLimit(rateLimitKey, 10, 5 * 60 * 1000)) {
+      res.status(429).json({ success: false, error: 'Too many login attempts. Please try again in a few minutes.' });
       return;
     }
 
@@ -260,7 +425,7 @@ export async function createApp({ serveClient = true }: CreateAppOptions = {}) {
     const user = authRecord
       ? (typeof authRecord.data_json === 'string' ? JSON.parse(authRecord.data_json) : authRecord.data_json)
       : users.find((u) => u.email.toLowerCase() === String(email).toLowerCase());
-    
+
     if (!user) {
       res.status(401).json({ success: false, error: 'Invalid email or password.' });
       return;
@@ -273,16 +438,25 @@ export async function createApp({ serveClient = true }: CreateAppOptions = {}) {
     }
 
     addAuditLog(user.id, user.role, user.email, 'USER_LOGIN', 'User', user.id, 'User logged in successfully');
-    res.json({ success: true, user, token: `jwt_token_${user.id}_${Date.now()}` });
-  });
+    res.json({ success: true, user, token: signSessionToken({ id: user.id, role: user.role }) });
+  }));
 
   // Auth: Register
-  app.post('/api/auth/register', (req, res) => {
+  app.post('/api/auth/register', ah(async (req, res) => {
     const { fullName, email, mobile } = req.body;
+    if (!fullName || !String(fullName).trim() || !email || !mobile) {
+      res.status(400).json({ success: false, error: 'Full name, email, and mobile number are required.' });
+      return;
+    }
+    const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailPattern.test(String(email).trim())) {
+      res.status(400).json({ success: false, error: 'Please enter a valid email address.' });
+      return;
+    }
     const existing = users.find((u) => u.email.toLowerCase() === email.toLowerCase() || u.mobile === mobile);
-    
+
     if (existing) {
-      res.json({ success: true, user: existing, token: `jwt_token_${existing.id}` });
+      res.json({ success: true, user: existing, token: signSessionToken({ id: existing.id, role: existing.role }) });
       return;
     }
 
@@ -296,28 +470,32 @@ export async function createApp({ serveClient = true }: CreateAppOptions = {}) {
       createdAt: new Date().toISOString(),
     };
     users.push(newUser);
-    saveUser(newUser, hashPassword(String(req.body.password || 'password123')));
+    await saveUser(newUser, hashPassword(String(req.body.password || 'password123')));
     addAuditLog(newUser.id, 'customer', newUser.email, 'USER_REGISTERED', 'User', newUser.id, 'New customer registration');
-    res.json({ success: true, user: newUser, token: `jwt_token_${newUser.id}` });
-  });
+    res.json({ success: true, user: newUser, token: signSessionToken({ id: newUser.id, role: newUser.role }) });
+  }));
 
   // Loan Products
   app.get('/api/loan-products', (req, res) => {
     res.json({ success: true, products: loanProducts });
   });
 
-  app.post('/api/loan-products', (req, res) => {
+  app.post('/api/loan-products', requireRole('admin'), ah(async (req, res) => {
     const product = req.body;
+    if (!product?.id || !product?.title) {
+      res.status(400).json({ success: false, error: 'Loan product id and title are required.' });
+      return;
+    }
     const idx = loanProducts.findIndex((p) => p.id === product.id);
     if (idx >= 0) {
       loanProducts[idx] = product;
     } else {
       loanProducts.push(product);
     }
-    saveLoanProduct(product);
+    await saveLoanProduct(product);
     addAuditLog('usr_admin_1', 'admin', 'admin@dhanifinance.in', 'PRODUCT_SAVED', 'LoanProduct', product.id, `Saved product ${product.title}`);
     res.json({ success: true, products: loanProducts });
-  });
+  }));
 
   // Automated Eligibility Engine Endpoint
   app.post('/api/eligibility/assess', (req, res) => {
@@ -400,6 +578,13 @@ export async function createApp({ serveClient = true }: CreateAppOptions = {}) {
       res.json({ success: true, applications: userApps });
       return;
     }
+    // No userId scope requested: this returns every applicant's unmasked PII
+    // (PAN, bank account, address) across the whole book, so it is admin-only.
+    const session = getSessionFromRequest(req);
+    if (!session || session.role !== 'admin') {
+      res.status(401).json({ success: false, error: 'Authentication required to list all applications.' });
+      return;
+    }
     res.json({ success: true, applications });
   });
 
@@ -409,7 +594,7 @@ export async function createApp({ serveClient = true }: CreateAppOptions = {}) {
 
   const normPhone = (str: string) => String(str || '').replace(/\D/g, '').slice(-10);
 
-  app.post('/api/applications/track', async (req, res) => {
+  app.post('/api/applications/track', ah(async (req, res) => {
     const { identifier, applicationId, contact } = req.body;
     const rawSearch = String(identifier || applicationId || contact || '').trim();
     const lookupValue = rawSearch.toLowerCase();
@@ -421,6 +606,13 @@ export async function createApp({ serveClient = true }: CreateAppOptions = {}) {
     }
     if (lookupValue.includes('@')) {
       res.status(400).json({ success: false, error: 'Please track using Application ID or registered mobile number only.' });
+      return;
+    }
+
+    // Application IDs/mobile numbers are guessable in a bounded search space;
+    // throttle by requester IP to slow down enumeration attempts.
+    if (!checkRateLimit(`track:${req.ip}`, 20, 5 * 60 * 1000)) {
+      res.status(429).json({ success: false, error: 'Too many tracking attempts. Please try again in a few minutes.' });
       return;
     }
 
@@ -454,21 +646,124 @@ export async function createApp({ serveClient = true }: CreateAppOptions = {}) {
       loanAccount: matchingLoan,
       sessionToken: `cust_token_${appItem.id}_${Date.now()}`,
     });
-  });
+  }));
 
-  app.post('/api/applications', async (req, res) => {
+  const validateNewApplicationPayload = (data: any): string | null => {
+    const product = loanProducts.find((p) => p.id === data.productId);
+    if (!data.productId || !product) return 'Please select a valid loan product.';
+
+    const amount = Number(data.requestedAmount);
+    if (!Number.isFinite(amount) || amount <= 0) return 'Please enter a valid requested loan amount.';
+    if (amount < product.minAmount || amount > product.maxAmount) {
+      return `Requested amount must be between ${product.minAmount} and ${product.maxAmount} for ${product.title}.`;
+    }
+
+    const tenure = Number(data.requestedTenureMonths);
+    if (!Number.isFinite(tenure) || tenure <= 0) return 'Please select a valid loan tenure.';
+    if (!data.purpose || !String(data.purpose).trim()) return 'Loan purpose is required.';
+
+    const personal = data.personalInfo || {};
+    if (!personal.fullName || !String(personal.fullName).trim()) return 'Applicant full name is required.';
+    if (!personal.fatherOrSpouseName || !String(personal.fatherOrSpouseName).trim()) return "Father's or spouse's name is required.";
+    if (!personal.dob || Number.isNaN(new Date(personal.dob).getTime())) return 'A valid date of birth is required.';
+
+    const panPattern = /^[A-Z]{5}[0-9]{4}[A-Z]{1}$/;
+    if (!panPattern.test(String(personal.panNumber || '').toUpperCase())) return 'A valid 10-character PAN number is required.';
+
+    const mobileDigits = String(personal.mobile || '').replace(/\D/g, '');
+    if (mobileDigits.length !== 10) return 'A valid 10-digit mobile number is required.';
+
+    const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailPattern.test(String(personal.email || '').trim())) return 'A valid email address is required.';
+    if (!personal.currentAddress || !String(personal.currentAddress).trim()) return 'Current residential address is required.';
+    // Not required: the current apply form's Personal & Banking step has no
+    // city/state/PIN-code inputs at all, so requiring one here made every
+    // submission fail with no way for the customer to fix it. Still validated
+    // (not just accepted blindly) if a caller does supply one.
+    if (personal.pincode && !/^\d{6}$/.test(String(personal.pincode).trim())) return 'PIN code must be a valid 6-digit number.';
+
+    const employment = data.employmentInfo || {};
+    const validEmploymentTypes = ['salaried', 'self_employed_pro', 'self_employed_biz', 'freelancer'];
+    if (!validEmploymentTypes.includes(employment.employmentType)) return 'A valid employment type is required.';
+
+    const financial = data.financialInfo || {};
+    if (!financial.bankName || !String(financial.bankName).trim()) return 'Bank name for disbursement is required.';
+    if (!financial.accountNumber || !String(financial.accountNumber).trim()) return 'Bank account number is required.';
+    const ifscPattern = /^[A-Z]{4}0[A-Z0-9]{6}$/;
+    if (!ifscPattern.test(String(financial.ifscCode || '').toUpperCase())) return 'A valid 11-character IFSC code is required.';
+
+    return null;
+  };
+
+  // Guards against duplicate application records from a double-click or a retried
+  // request: the same mobile number submitting the same product/amount/purpose
+  // within a short window is treated as a resubmit of the in-flight request rather
+  // than a brand new application. The frontend already disables its submit button
+  // while a request is pending, so in practice this only catches races the UI can't.
+  const recentSubmissions = new Map<string, { appId: string; at: number }>();
+  const DUPLICATE_SUBMISSION_WINDOW_MS = 15 * 1000;
+
+  app.post('/api/applications', ah(async (req, res) => {
     const data = req.body;
     let appItem: LoanApplication;
     let isNewApplication = false;
 
-    if (data.id && applications.some((a) => a.id === data.id)) {
+    const isUpdate = Boolean(data.id && applications.some((a) => a.id === data.id));
+    let dedupeKey: string | null = null;
+    if (!isUpdate) {
+      const validationError = validateNewApplicationPayload(data);
+      if (validationError) {
+        res.status(400).json({ success: false, error: validationError });
+        return;
+      }
+
+      if (recentSubmissions.size > 2000) {
+        for (const [key, value] of recentSubmissions) {
+          if (Date.now() - value.at > DUPLICATE_SUBMISSION_WINDOW_MS) recentSubmissions.delete(key);
+        }
+      }
+
+      dedupeKey = [
+        normPhone(data.personalInfo?.mobile || ''),
+        data.productId,
+        Number(data.requestedAmount),
+        String(data.purpose || '').trim().toLowerCase(),
+      ].join('|');
+      const recent = recentSubmissions.get(dedupeKey);
+      if (recent && Date.now() - recent.at < DUPLICATE_SUBMISSION_WINDOW_MS) {
+        const existing = applications.find((a) => a.id === recent.appId);
+        if (existing) {
+          res.json({ success: true, application: existing });
+          return;
+        }
+      }
+      recentSubmissions.set(dedupeKey, { appId: '', at: Date.now() });
+    }
+
+    if (isUpdate) {
       const idx = applications.findIndex((a) => a.id === data.id);
       appItem = { ...applications[idx], ...data, updatedAt: new Date().toISOString() };
       applications[idx] = appItem;
     } else {
       isNewApplication = true;
-      const appSeq = String(applications.length + 101).padStart(6, '0');
-      const newId = `LN-2026-${appSeq}`;
+      // Checking the in-memory array alone is not sufficient: it only reflects
+      // this process's view. A second server process (or this same process after
+      // a restart where the array was reseeded at a different count) can compute
+      // the same sequential ID; since saves upsert, that collision would silently
+      // overwrite a different customer's application. Verify against the database
+      // itself and retry on the rare collision.
+      let newId = '';
+      for (let attempt = 0; attempt < 8; attempt += 1) {
+        const candidateSeq = applications.length + 101 + attempt;
+        const candidate = `LN-2026-${String(candidateSeq).padStart(6, '0')}`;
+        if (applications.some((a) => a.id === candidate)) continue;
+        if (await applicationIdExists(candidate)) continue;
+        newId = candidate;
+        break;
+      }
+      if (!newId) {
+        newId = `LN-2026-${String(Date.now()).slice(-6)}`;
+      }
       appItem = {
         ...data,
         id: newId,
@@ -480,6 +775,7 @@ export async function createApp({ serveClient = true }: CreateAppOptions = {}) {
         updatedAt: new Date().toISOString(),
       };
       applications.unshift(appItem);
+      if (dedupeKey) recentSubmissions.set(dedupeKey, { appId: newId, at: Date.now() });
     }
 
     await saveApplication(appItem);
@@ -509,12 +805,19 @@ export async function createApp({ serveClient = true }: CreateAppOptions = {}) {
     }
     addAuditLog(appItem.userId || 'usr_guest', 'customer', appItem.personalInfo?.email || 'user', 'APPLICATION_SAVED', 'LoanApplication', appItem.id, `Saved loan application ${appItem.id}`);
     res.json({ success: true, application: appItem });
-  });
+  }));
+
+  const VALID_APPLICATION_STATUSES = new Set(APPLICATION_STATUSES.map((item) => item.value));
 
   // Application Status Change (Admin approval, rejection, request info)
-  app.patch('/api/applications/:id/status', async (req, res) => {
+  app.patch('/api/applications/:id/status', requireRole('admin'), ah(async (req, res) => {
     const { id } = req.params;
     const { status, note, approvedAmount, approvedRate, approvedTenureMonths, processingFee, rejectionReason } = req.body;
+
+    if (!status || !VALID_APPLICATION_STATUSES.has(status)) {
+      res.status(400).json({ success: false, error: 'A valid application status is required.' });
+      return;
+    }
 
     const idx = applications.findIndex((a) => a.id === id);
     if (idx === -1) {
@@ -606,10 +909,10 @@ export async function createApp({ serveClient = true }: CreateAppOptions = {}) {
     });
     addAuditLog('usr_admin_1', 'admin', 'admin@dhanifinance.in', 'APPLICATION_STATUS_UPDATED', 'LoanApplication', appItem.id, `Updated status to ${status}`);
     res.json({ success: true, application: appItem });
-  });
+  }));
 
   // Admin Request Processing Fee (Only allowed if all docs are verified)
-  app.post('/api/applications/:id/request-processing-fee', async (req, res) => {
+  app.post('/api/applications/:id/request-processing-fee', requireRole('admin'), ah(async (req, res) => {
     const { id } = req.params;
     const { feeAmount } = req.body;
     const appItem = applications.find((a) => a.id === id);
@@ -654,7 +957,7 @@ export async function createApp({ serveClient = true }: CreateAppOptions = {}) {
     });
     addAuditLog('usr_admin_1', 'admin', 'admin@dhanifinance.in', 'PROCESSING_FEE_REQUESTED', 'LoanApplication', appItem.id, `Requested processing fee ₹${fee}`);
     res.json({ success: true, application: appItem });
-  });
+  }));
 
   // Loan Accounts
   app.get('/api/loan-accounts', (req, res) => {
@@ -663,17 +966,36 @@ export async function createApp({ serveClient = true }: CreateAppOptions = {}) {
       res.json({ success: true, loanAccounts: loanAccounts.filter((l) => l.userId === userId) });
       return;
     }
+    const session = getSessionFromRequest(req);
+    if (!session || session.role !== 'admin') {
+      res.status(401).json({ success: false, error: 'Authentication required to list all loan accounts.' });
+      return;
+    }
     res.json({ success: true, loanAccounts });
   });
 
   // Payments: Submit Proof
-  app.post('/api/payments/submit', async (req, res) => {
+  app.post('/api/payments/submit', ah(async (req, res) => {
     const { loanAccountId, applicationId, userId, customerName, amount, purpose, utrNumber, proofScreenshotUrl, installmentNumber } = req.body;
 
-    // Check duplicate UTR
+    if (!utrNumber || !String(utrNumber).trim()) {
+      res.status(400).json({ success: false, error: 'A valid UTR / transaction reference number is required.' });
+      return;
+    }
+    if (!Number.isFinite(Number(amount)) || Number(amount) <= 0) {
+      res.status(400).json({ success: false, error: 'A valid payment amount is required.' });
+      return;
+    }
+    if (!loanAccountId && !applicationId) {
+      res.status(400).json({ success: false, error: 'A related application or loan account is required.' });
+      return;
+    }
+
+    // Check duplicate UTR (in-memory fast path; the DB layer also enforces a
+    // UNIQUE constraint on utr_number as the source of truth under a race).
     const duplicate = paymentSubmissions.find((p) => p.utrNumber.trim().toLowerCase() === utrNumber.trim().toLowerCase());
     if (duplicate) {
-      res.status(400).json({ success: false, error: 'This UTR number has already been submitted for verification.' });
+      res.status(409).json({ success: false, error: 'This UTR number has already been submitted for verification.' });
       return;
     }
 
@@ -689,14 +1011,27 @@ export async function createApp({ serveClient = true }: CreateAppOptions = {}) {
       installmentNumber: installmentNumber ? Number(installmentNumber) : 1,
       upiIdUsed: settings.upiId,
       utrNumber,
-      proofScreenshotUrl: proofScreenshotUrl || 'https://images.unsplash.com/photo-1559526324-4b87b5e36e44?w=400&h=600&fit=crop',
+      // Screenshot proof is optional - fabricating a stand-in image here would make
+      // an admin reviewer see what looks like real customer-submitted proof for a
+      // payment that actually had none attached.
+      proofScreenshotUrl: proofScreenshotUrl || '',
       paymentDate: new Date().toISOString(),
       submittedAt: new Date().toISOString(),
       status: 'pending_verification',
     };
 
     paymentSubmissions.unshift(newPayment);
-    await savePaymentSubmission(newPayment);
+    try {
+      await savePaymentSubmission(newPayment);
+    } catch (error) {
+      paymentSubmissions.shift();
+      const message = error instanceof Error ? error.message : String(error);
+      if (/duplicate|unique/i.test(message)) {
+        res.status(409).json({ success: false, error: 'This UTR number has already been submitted for verification.' });
+        return;
+      }
+      throw error;
+    }
     addNotification({
       userId: 'usr_admin_1',
       title: 'Payment submitted',
@@ -723,14 +1058,29 @@ export async function createApp({ serveClient = true }: CreateAppOptions = {}) {
 
     addAuditLog(userId || 'usr_guest', 'customer', customerName || 'Customer', 'PAYMENT_SUBMITTED', 'PaymentSubmission', newPayment.id, `Submitted UTR ${utrNumber} for ₹${amount} (${paymentPurpose})`);
     res.json({ success: true, payment: newPayment });
-  });
+  }));
 
   app.get('/api/payments', (req, res) => {
+    const { userId, applicationId, loanAccountId } = req.query;
+    if (userId || applicationId || loanAccountId) {
+      const filtered = paymentSubmissions.filter((p) =>
+        (userId ? p.userId === userId : true) &&
+        (applicationId ? p.applicationId === applicationId : true) &&
+        (loanAccountId ? p.loanAccountId === loanAccountId : true)
+      );
+      res.json({ success: true, payments: filtered });
+      return;
+    }
+    const session = getSessionFromRequest(req);
+    if (!session || session.role !== 'admin') {
+      res.status(401).json({ success: false, error: 'Authentication required to list all payments.' });
+      return;
+    }
     res.json({ success: true, payments: paymentSubmissions });
   });
 
   // Payments: Admin Verification / Approval
-  app.post('/api/payments/:id/verify', async (req, res) => {
+  app.post('/api/payments/:id/verify', requireRole('admin'), ah(async (req, res) => {
     const { id } = req.params;
     const { action, note } = req.body; // 'approve' | 'reject'
 
@@ -741,7 +1091,13 @@ export async function createApp({ serveClient = true }: CreateAppOptions = {}) {
     }
 
     const pay = paymentSubmissions[payIdx];
-    const previousPaymentStatus = pay.status;
+    // Idempotency guard: a payment that has already reached a final state must not
+    // be re-processed. Without this, a double-click/retry on "Approve" would mint a
+    // second receipt and double-count the amount against the loan ledger.
+    if (pay.status === 'verified' || pay.status === 'rejected') {
+      res.json({ success: true, payment: pay });
+      return;
+    }
     let verifiedApplication: LoanApplication | undefined;
     if (action === 'approve') {
       pay.status = 'verified';
@@ -836,11 +1192,11 @@ export async function createApp({ serveClient = true }: CreateAppOptions = {}) {
 
     paymentSubmissions[payIdx] = pay;
     await savePaymentSubmission(pay);
-    if (action === 'approve' && previousPaymentStatus !== 'verified') {
+    if (action === 'approve') {
       void sendPaymentReceivedEmail(settings, verifiedApplication || applications.find((a) => a.id === pay.applicationId), pay);
     }
     res.json({ success: true, payment: pay });
-  });
+  }));
 
   // Public Receipt Verification
   app.get('/api/receipts/verify/:receiptNumber', (req, res) => {
@@ -855,11 +1211,34 @@ export async function createApp({ serveClient = true }: CreateAppOptions = {}) {
 
   // Support Tickets
   app.get('/api/support/tickets', (req, res) => {
+    const { userId } = req.query;
+    if (userId) {
+      res.json({ success: true, tickets: supportTickets.filter((t) => t.userId === userId) });
+      return;
+    }
+    const session = getSessionFromRequest(req);
+    if (!session || session.role !== 'admin') {
+      res.status(401).json({ success: false, error: 'Authentication required to list all support tickets.' });
+      return;
+    }
     res.json({ success: true, tickets: supportTickets });
   });
 
-  app.post('/api/support/tickets', async (req, res) => {
+  app.post('/api/support/tickets', ah(async (req, res) => {
     const { ticketId, sender, text, category, subject, userId, customerName, customerEmail, email, phone, applicationId } = req.body;
+    if (!text || !String(text).trim()) {
+      res.status(400).json({ success: false, error: 'Message text is required.' });
+      return;
+    }
+    // Replying as 'support' impersonates the company on the ticket thread and
+    // notifies the customer, so it must be an authenticated admin/staff action.
+    if (sender === 'support') {
+      const session = getSessionFromRequest(req);
+      if (!session || session.role !== 'admin') {
+        res.status(401).json({ success: false, error: 'Authentication required to reply as support.' });
+        return;
+      }
+    }
     if (ticketId) {
       const idx = supportTickets.findIndex((t) => t.id === ticketId);
       if (idx >= 0) {
@@ -913,7 +1292,7 @@ export async function createApp({ serveClient = true }: CreateAppOptions = {}) {
       link: `/admin/support/${newTicket.id}`,
     });
     res.json({ success: true, ticket: newTicket });
-  });
+  }));
 
   // Notifications
   app.get('/api/notifications', (req, res) => {
@@ -922,6 +1301,12 @@ export async function createApp({ serveClient = true }: CreateAppOptions = {}) {
 
     if (userId) {
       results = results.filter((notification) => notification.userId === String(userId));
+    } else {
+      const session = getSessionFromRequest(req);
+      if (!session || session.role !== 'admin') {
+        res.status(401).json({ success: false, error: 'Authentication required to list all notifications.' });
+        return;
+      }
     }
     if (read === 'true' || read === 'false') {
       const isRead = read === 'true';
@@ -981,11 +1366,11 @@ export async function createApp({ serveClient = true }: CreateAppOptions = {}) {
   });
 
   // Audit Logs
-  app.get('/api/audit-logs', (req, res) => {
+  app.get('/api/audit-logs', requireRole('admin'), (req, res) => {
     res.json({ success: true, auditLogs });
   });
 
-  app.get('/api/admin/dashboard/summary', (req, res) => {
+  app.get('/api/admin/dashboard/summary', requireRole('admin'), (req, res) => {
     const activeLoans = loanAccounts.filter((loan) => loan.status === 'active');
     const pendingPayments = paymentSubmissions.filter((payment) => payment.status === 'pending_verification');
     const verifiedPayments = paymentSubmissions.filter((payment) => payment.status === 'verified');
@@ -1060,21 +1445,21 @@ export async function createApp({ serveClient = true }: CreateAppOptions = {}) {
   });
 
   // Receipts List
-  app.get('/api/receipts', (req, res) => {
+  app.get('/api/receipts', requireRole('admin'), (req, res) => {
     res.json({ success: true, receipts });
   });
 
   // Customers Management
-  app.get('/api/customers', (req, res) => {
+  app.get('/api/customers', requireRole('admin'), (req, res) => {
     res.json({ success: true, customers });
   });
 
-  app.post('/api/customers', (req, res) => {
+  app.post('/api/customers', requireRole('admin'), ah(async (req, res) => {
     const cust = req.body;
     const idx = customers.findIndex((c) => c.id === cust.id);
     if (idx >= 0) {
       customers[idx] = { ...customers[idx], ...cust };
-      saveCustomer(customers[idx]);
+      await saveCustomer(customers[idx]);
     } else {
       const newCustomer = {
         ...cust,
@@ -1082,39 +1467,49 @@ export async function createApp({ serveClient = true }: CreateAppOptions = {}) {
         createdAt: new Date().toISOString(),
       };
       customers.unshift(newCustomer);
-      saveCustomer(newCustomer);
+      await saveCustomer(newCustomer);
     }
     addAuditLog('usr_admin_1', 'admin', 'admin@dhanifinance.in', 'CUSTOMER_UPDATED', 'Customer', cust.id || 'new', `Updated customer ${cust.fullName || cust.email}`);
     res.json({ success: true, customers });
-  });
+  }));
+
+  const VALID_DOCUMENT_STATUSES = new Set(['pending', 'verified', 'rejected', 'reupload_required']);
 
   // Document Verification Endpoint
-  app.post('/api/documents/verify', (req, res) => {
+  app.post('/api/documents/verify', requireRole('admin'), ah(async (req, res) => {
     const { applicationId, documentId, status, rejectionNote } = req.body;
-    const appItem = applications.find((a) => a.id === applicationId);
-    if (appItem && appItem.documents) {
-      const doc = appItem.documents.find((d) => d.id === documentId);
-      if (doc) {
-        doc.status = status;
-        if (status === 'rejected' && rejectionNote) {
-          doc.rejectionNote = rejectionNote;
-        } else if (status === 'verified') {
-          delete doc.rejectionNote;
-        }
-        appItem.updatedAt = new Date().toISOString();
-        saveApplication(appItem);
-        addAuditLog('usr_admin_1', 'admin', 'admin@dhanifinance.in', 'DOCUMENT_VERIFIED', 'ApplicationDocument', documentId, `Document ${doc.title} marked ${status}`);
-      }
+    if (!VALID_DOCUMENT_STATUSES.has(status)) {
+      res.status(400).json({ success: false, error: 'A valid document status is required.' });
+      return;
     }
+    const appItem = applications.find((a) => a.id === applicationId);
+    if (!appItem) {
+      res.status(404).json({ success: false, error: 'Application not found' });
+      return;
+    }
+    const doc = appItem.documents?.find((d) => d.id === documentId);
+    if (!doc) {
+      res.status(404).json({ success: false, error: 'Document not found on this application' });
+      return;
+    }
+    doc.status = status;
+    if (status === 'rejected' && rejectionNote) {
+      doc.rejectionNote = rejectionNote;
+    } else if (status === 'verified') {
+      delete doc.rejectionNote;
+    }
+    appItem.updatedAt = new Date().toISOString();
+    await saveApplication(appItem);
+    addAuditLog('usr_admin_1', 'admin', 'admin@dhanifinance.in', 'DOCUMENT_VERIFIED', 'ApplicationDocument', documentId, `Document ${doc.title} marked ${status}`);
     res.json({ success: true, application: appItem });
-  });
+  }));
 
   // CMS Content Management
   app.get('/api/cms', (req, res) => {
     res.json({ success: true, cms: cmsContent });
   });
 
-  app.post('/api/cms', (req, res) => {
+  app.post('/api/cms', requireRole('admin'), (req, res) => {
     cmsContent = { ...cmsContent, ...req.body };
     saveCmsContent(cmsContent);
     addAuditLog('usr_admin_1', 'admin', 'admin@dhanifinance.in', 'CMS_UPDATED', 'CmsContent', 'global', 'Updated website CMS content');
@@ -1122,16 +1517,16 @@ export async function createApp({ serveClient = true }: CreateAppOptions = {}) {
   });
 
   // Staff & Permissions
-  app.get('/api/staff', (req, res) => {
+  app.get('/api/staff', requireRole('admin'), (req, res) => {
     res.json({ success: true, staff: staffMembers });
   });
 
-  app.post('/api/staff', (req, res) => {
+  app.post('/api/staff', requireRole('admin'), ah(async (req, res) => {
     const member = req.body;
     const idx = staffMembers.findIndex((s) => s.id === member.id);
     if (idx >= 0) {
       staffMembers[idx] = { ...staffMembers[idx], ...member };
-      saveStaffMember(staffMembers[idx]);
+      await saveStaffMember(staffMembers[idx]);
     } else {
       const newStaffMember = {
         ...member,
@@ -1139,34 +1534,34 @@ export async function createApp({ serveClient = true }: CreateAppOptions = {}) {
         lastLogin: new Date().toISOString(),
       };
       staffMembers.unshift(newStaffMember);
-      saveStaffMember(newStaffMember);
+      await saveStaffMember(newStaffMember);
     }
     addAuditLog('usr_admin_1', 'admin', 'admin@dhanifinance.in', 'STAFF_SAVED', 'StaffMember', member.id || 'new', `Saved staff member ${member.fullName}`);
     res.json({ success: true, staff: staffMembers });
-  });
+  }));
 
   // Eligibility Rules
-  app.get('/api/eligibility/rules', (req, res) => {
+  app.get('/api/eligibility/rules', requireRole('admin'), (req, res) => {
     res.json({ success: true, rules: eligibilityRules });
   });
 
-  app.post('/api/eligibility/rules', (req, res) => {
+  app.post('/api/eligibility/rules', requireRole('admin'), ah(async (req, res) => {
     const rule = req.body;
     const idx = eligibilityRules.findIndex((r) => r.id === rule.id);
     if (idx >= 0) {
       eligibilityRules[idx] = rule;
-      saveEligibilityRule(eligibilityRules[idx]);
+      await saveEligibilityRule(eligibilityRules[idx]);
     } else {
       const newRule = { ...rule, id: `rule_${Date.now()}` };
       eligibilityRules.unshift(newRule);
-      saveEligibilityRule(newRule);
+      await saveEligibilityRule(newRule);
     }
     addAuditLog('usr_admin_1', 'admin', 'admin@dhanifinance.in', 'RULE_SAVED', 'EligibilityRule', rule.id || 'new', `Saved eligibility rule ${rule.ruleName}`);
     res.json({ success: true, rules: eligibilityRules });
-  });
+  }));
 
   // Loan Manual Adjustments
-  app.post('/api/loans/:accountNumber/adjust', (req, res) => {
+  app.post('/api/loans/:accountNumber/adjust', requireRole('admin'), ah(async (req, res) => {
     const { accountNumber } = req.params;
     const { type, amount, reason, installmentNumber } = req.body; // type: 'waive_charge' | 'offline_payment' | 'reschedule'
     const loan = loanAccounts.find((l) => l.accountNumber === accountNumber);
@@ -1178,6 +1573,10 @@ export async function createApp({ serveClient = true }: CreateAppOptions = {}) {
 
     if (type === 'offline_payment' && amount) {
       const pAmt = Number(amount);
+      if (!Number.isFinite(pAmt) || pAmt <= 0) {
+        res.status(400).json({ success: false, error: 'A valid adjustment amount is required.' });
+        return;
+      }
       loan.totalPaid += pAmt;
       loan.outstandingPrincipal = Math.max(0, loan.outstandingPrincipal - pAmt);
       if (installmentNumber) {
@@ -1193,11 +1592,22 @@ export async function createApp({ serveClient = true }: CreateAppOptions = {}) {
       if (inst) inst.charges = 0;
     }
 
-    saveLoanAccount(loan);
+    await saveLoanAccount(loan);
     addAuditLog('usr_admin_1', 'admin', 'admin@dhanifinance.in', 'LOAN_ADJUSTED', 'LoanAccount', accountNumber, `Loan adjustment: ${type} of ₹${amount || 0} (${reason})`);
     res.json({ success: true, loanAccount: loan });
-  });
+  }));
 
+  // Fallback error handler: catches anything that slips past route-level handling
+  // (e.g. malformed JSON bodies) so clients always get a JSON error instead of an
+  // HTML stack trace or a hung connection. Must be registered after all routes.
+  app.use((err: any, req: express.Request, res: express.Response, next: express.NextFunction) => {
+    console.error(`Unhandled error on ${req.method} ${req.path}:`, err);
+    if (res.headersSent) {
+      next(err);
+      return;
+    }
+    res.status(err?.status || 500).json({ success: false, error: 'An unexpected server error occurred. Please try again.' });
+  });
 
   if (serveClient) {
     // Vite middleware for development

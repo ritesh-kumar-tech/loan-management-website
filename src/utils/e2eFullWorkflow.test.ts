@@ -7,9 +7,14 @@ const baseUrl = `http://127.0.0.1:${PORT}`;
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 const request = async (path: string, options: RequestInit = {}) => {
+  // `headers` must be merged AFTER spreading `options`, not before - otherwise
+  // `...options` (which itself carries a `headers` key whenever a caller passes
+  // one, e.g. an Authorization header) clobbers the Content-Type set here, the
+  // JSON body parser never kicks in server-side, and every field silently comes
+  // through as undefined.
   const response = await fetch(`${baseUrl}${path}`, {
-    headers: { 'Content-Type': 'application/json', ...(options.headers || {}) },
     ...options,
+    headers: { 'Content-Type': 'application/json', ...(options.headers || {}) },
   });
   let body: any = null;
   try {
@@ -46,6 +51,15 @@ async function runE2ETest() {
 
     const ready = await waitForServer();
     assert.equal(ready, true, 'Test server started successfully on port 3009');
+
+    // 0. Admin Login (required for every admin-only action exercised below)
+    const adminLoginRes = await request('/api/auth/login', {
+      method: 'POST',
+      body: JSON.stringify({ email: 'admin@dhanifinance.in', password: 'password123' }),
+    });
+    assert.equal(adminLoginRes.response.status, 200, 'Admin login succeeds');
+    const adminAuth = { Authorization: `Bearer ${adminLoginRes.body.token}` };
+    console.log('[PASS] Step 0: Admin authenticated for the workflow');
 
     // 1. Submit Application
     const newAppPayload = {
@@ -144,6 +158,7 @@ async function runE2ETest() {
     for (const docId of ['doc_1', 'doc_2', 'doc_3', 'doc_4']) {
       const docVerifyRes = await request('/api/documents/verify', {
         method: 'POST',
+        headers: adminAuth,
         body: JSON.stringify({ applicationId: appId, documentId: docId, status: 'verified' }),
       });
       assert.equal(docVerifyRes.response.status, 200, `Document ${docId} verified`);
@@ -153,6 +168,7 @@ async function runE2ETest() {
     // 6. Admin Request Processing Fee
     const reqFeeRes = await request(`/api/applications/${appId}/request-processing-fee`, {
       method: 'POST',
+      headers: adminAuth,
       body: JSON.stringify({ feeAmount: 2000 }),
     });
     assert.equal(reqFeeRes.response.status, 200, 'Processing fee request returns 200');
@@ -161,6 +177,11 @@ async function runE2ETest() {
     console.log('[PASS] Step 6: Admin requested processing fee of ₹2,000');
 
     // 7. Customer Pays Processing Fee via UPI
+    // UTRs must be unique per run - this script is re-run against a persistent
+    // database (not reset between runs), and the backend correctly rejects a
+    // UTR it has already seen, so a hardcoded value here would only work once.
+    const runSuffix = Math.random().toString().slice(2, 8);
+    const feeUtr = `UTR9988776${runSuffix}`;
     const feePaymentRes = await request('/api/payments/submit', {
       method: 'POST',
       body: JSON.stringify({
@@ -169,18 +190,19 @@ async function runE2ETest() {
         customerName: 'Vikram Sharma',
         amount: 2000,
         purpose: 'processing_fee',
-        utrNumber: 'UTR998877665544',
+        utrNumber: feeUtr,
         proofScreenshotUrl: 'blob:proof',
       }),
     });
     assert.equal(feePaymentRes.response.status, 200, 'Processing fee payment submission returns 200');
     assert.ok(feePaymentRes.body.payment?.id, 'Payment record generated');
     const feePayId = feePaymentRes.body.payment.id;
-    console.log('[PASS] Step 7: Customer submitted processing fee payment with UTR998877665544');
+    console.log(`[PASS] Step 7: Customer submitted processing fee payment with ${feeUtr}`);
 
     // 8. Admin Verifies Processing Fee Payment
     const verifyFeePayRes = await request(`/api/payments/${feePayId}/verify`, {
       method: 'POST',
+      headers: adminAuth,
       body: JSON.stringify({ action: 'approve', note: 'Processing fee verified with HDFC statement' }),
     });
     assert.equal(verifyFeePayRes.response.status, 200, 'Processing fee payment verification returns 200');
@@ -189,6 +211,7 @@ async function runE2ETest() {
     // 9. Admin Performs Final Loan Approval
     const finalApproveRes = await request(`/api/applications/${appId}/status`, {
       method: 'PATCH',
+      headers: adminAuth,
       body: JSON.stringify({
         status: 'approved',
         approvedAmount: 500000,
@@ -222,7 +245,7 @@ async function runE2ETest() {
         amount: postApprovalRes.body.loanAccount.monthlyEmi,
         purpose: 'emi',
         installmentNumber: 1,
-        utrNumber: 'UTR112233445566',
+        utrNumber: `UTR1122334${runSuffix}`,
       }),
     });
     assert.equal(emiPayRes.response.status, 200, 'EMI payment submission returns 200');
@@ -232,6 +255,7 @@ async function runE2ETest() {
     // 12. Admin Verifies EMI Payment & Receipt Generation
     const verifyEmiRes = await request(`/api/payments/${emiPayId}/verify`, {
       method: 'POST',
+      headers: adminAuth,
       body: JSON.stringify({ action: 'approve', note: 'EMI #1 payment verified' }),
     });
     assert.equal(verifyEmiRes.response.status, 200, 'EMI payment verification returns 200');

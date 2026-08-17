@@ -159,6 +159,7 @@ export default function App() {
   };
 
   const handleLogout = () => {
+    api.logout();
     setUser(null);
     setVerifiedCustomerApp(null);
     setVerifiedCustomerLoan(null);

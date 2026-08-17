@@ -1,6 +1,7 @@
 import { jsPDF } from 'jspdf';
 import { LoanApplication, LoanAccount, PaymentSubmission, Receipt, CompanySettings } from '../types';
 import { calculateEmi, formatINR, formatDate } from './calculator';
+import { DHANI_LOGO_ASPECT_RATIO, DHANI_LOGO_DATA_URI } from './dhaniLogo';
 
 const formatPDF_INR = (amount: number) => formatINR(amount || 0).replace('₹', 'Rs. ').replace('â‚¹', 'Rs. ');
 
@@ -49,46 +50,73 @@ function drawKeyValueRows(doc: jsPDF, rows: [string, string][], x: number, y: nu
   });
 }
 
+// Shared by every generated document. A plain white background is used here
+// on purpose - the official logo is a JPEG with a solid white background
+// (no transparency), so filling this area with any other color would leave
+// a visible box around it.
 function drawHeader(doc: jsPDF, settings: CompanySettings, docTitle: string) {
-  // Primary top bar
-  doc.setFillColor(11, 25, 44); // Deep Navy
-  doc.rect(0, 0, 210, 24, 'F');
+  const margin = 14;
+  const logoWidth = 30;
+  const logoHeight = logoWidth * DHANI_LOGO_ASPECT_RATIO;
+  const logoY = 6;
+  doc.addImage(DHANI_LOGO_DATA_URI, 'JPEG', margin, logoY, logoWidth, logoHeight);
 
-  // Draw Logo (Stylized D)
-  doc.setFillColor(16, 185, 129); // Emerald-500
-  doc.roundedRect(14, 6, 12, 12, 2, 2, 'F');
-  doc.setTextColor(255, 255, 255);
+  const textBaseline = logoY + logoHeight / 2 + 3;
   doc.setFont('helvetica', 'bold');
-  doc.setFontSize(10);
-  doc.text('D', 18, 14.5);
+  doc.setFontSize(13);
+  doc.setTextColor(11, 25, 44);
+  doc.text(settings.companyName.toUpperCase(), margin + logoWidth + 5, textBaseline);
 
-  doc.setFontSize(14);
-  doc.text(settings.companyName.toUpperCase(), 30, 14.5);
-
-  doc.setFontSize(9);
   doc.setFont('helvetica', 'normal');
-  doc.text(docTitle.toUpperCase(), 196, 14.5, { align: 'right' });
+  doc.setFontSize(9);
+  doc.setTextColor(100, 116, 139);
+  doc.text(docTitle.toUpperCase(), 196, textBaseline, { align: 'right' });
 
-  // Sub-header with company contact
+  // Sub-header with company contact. Address, phone and email were previously
+  // one concatenated line with no width limit - long enough (with a full
+  // registered address) to run straight off the right edge of the page. Each
+  // now gets its own line, and the address is defensively wrapped too.
   doc.setTextColor(100, 116, 139);
   doc.setFontSize(8);
-  doc.text(`${settings.registeredAddress} | Phone: ${settings.supportPhone} | Email: ${settings.supportEmail}`, 14, 30);
-  doc.text(`NBFC Reg/License: ${settings.nbfcLicenseInfo} | GSTIN: ${settings.gstNumber}`, 14, 34);
+  const contentWidth = 210 - margin * 2;
+  const addressLines = doc.splitTextToSize(settings.registeredAddress || settings.branchAddress || '', contentWidth);
+  doc.text(addressLines, margin, 30);
+  const contactY = 30 + addressLines.length * 3.6;
+  doc.text(`Phone: ${settings.supportPhone} | Email: ${settings.supportEmail}`, margin, contactY);
+  doc.text(`NBFC Reg/License: ${settings.nbfcLicenseInfo} | GSTIN: ${settings.gstNumber}`, margin, contactY + 4);
 
-  doc.setDrawColor(226, 232, 240);
-  doc.line(14, 37, 196, 37);
+  doc.setDrawColor(203, 213, 225);
+  doc.setLineWidth(0.4);
+  doc.line(margin, contactY + 7, 210 - margin, contactY + 7);
 }
 
-function drawFooter(doc: jsPDF, settings: CompanySettings, docNumber: string) {
+// Shared by every generated document's closing block. Reserves a fixed band
+// at the very bottom of the page (independent of how far each document's own
+// content ran) so it never depends on - or collides with - whatever the
+// calling document drew above it.
+function drawFooter(doc: jsPDF, settings: CompanySettings, docNumber: string, baseUrl?: string) {
+  const pageWidth = 210;
   const pageHeight = 297;
-  doc.setDrawColor(226, 232, 240);
-  doc.line(14, pageHeight - 20, 196, pageHeight - 20);
+  const margin = 14;
+  const footerTop = pageHeight - 24;
 
-  doc.setFontSize(7);
+  doc.setDrawColor(226, 232, 240);
+  doc.setLineWidth(0.3);
+  doc.line(margin, footerTop, pageWidth - margin, footerTop);
+
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(7.4);
+  doc.setTextColor(100, 116, 139);
+  const addressLines = doc.splitTextToSize(settings.registeredAddress || settings.branchAddress || '', pageWidth - margin * 2);
+  doc.text(addressLines, margin, footerTop + 5);
+  const afterAddressY = footerTop + 5 + addressLines.length * 3.6;
+
+  doc.setFontSize(6.8);
   doc.setTextColor(148, 163, 184);
-  doc.text(`Doc ID: ${docNumber} | Generated on: ${new Date().toLocaleString('en-IN')}`, 14, pageHeight - 14);
-  doc.text(`Verify online: ${window.location.origin}/verify-receipt?id=${docNumber}`, 14, pageHeight - 10);
-  doc.text('Confidential & Legally Binding - Dhani Finance Automated Lending System', 196, pageHeight - 10, { align: 'right' });
+  const origin = baseUrl || (typeof window !== 'undefined' ? window.location.origin : '');
+  doc.text(`Doc ID: ${docNumber} | Generated on: ${new Date().toLocaleString('en-IN')}`, margin, afterAddressY + 3.4);
+  doc.text(`Verify online: ${origin}/verify-receipt?id=${docNumber}`, margin, afterAddressY + 7);
+  doc.text('Confidential & Legally Binding', pageWidth - margin, afterAddressY + 7, { align: 'right' });
 }
 
 function drawSignatures(doc: jsPDF, settings: CompanySettings, yPos: number) {
@@ -109,55 +137,24 @@ function drawSignatures(doc: jsPDF, settings: CompanySettings, yPos: number) {
   doc.text(`${settings.authorizedSignatoryTitle}`, 140, yPos + 31);
 }
 
-function drawDhaniLogo(doc: jsPDF, x: number, y: number, scale = 1) {
-  const blue: [number, number, number] = [0, 101, 176];
-  const orange: [number, number, number] = [245, 139, 28];
-  const green: [number, number, number] = [36, 196, 37];
-
-  doc.setFont('helvetica', 'bolditalic');
-  doc.setFontSize(15 * scale);
-  doc.setTextColor(...green);
-  doc.text('Dhani', x, y + 1 * scale);
-
-  doc.setDrawColor(...orange);
-  doc.setLineWidth(1.2 * scale);
-  doc.lines(
-    [
-      [12 * scale, -2.5 * scale],
-      [24 * scale, -3.5 * scale],
-      [38 * scale, -1 * scale],
-    ],
-    x + 28 * scale,
-    y - 2 * scale
-  );
-  doc.setFillColor(...orange);
-  doc.triangle(x + 71 * scale, y - 6 * scale, x + 66 * scale, y - 2 * scale, x + 69 * scale, y + 1.5 * scale, 'F');
-
-  doc.setFillColor(...blue);
-  doc.circle(x + 6 * scale, y + 17 * scale, 6.4 * scale, 'F');
-  doc.setFillColor(...blue);
-  doc.triangle(x + 2.5 * scale, y + 10 * scale, x + 9.5 * scale, y + 10 * scale, x + 6 * scale, y + 5.5 * scale, 'F');
-  doc.setDrawColor(...blue);
-  doc.setLineWidth(1.1 * scale);
-  doc.line(x + 2.2 * scale, y + 9.7 * scale, x + 9.8 * scale, y + 9.7 * scale);
-
-  doc.setFont('helvetica', 'bolditalic');
-  doc.setFontSize(26 * scale);
-  doc.setTextColor(...blue);
-  doc.text('dhani', x + 15 * scale, y + 21 * scale);
-}
-
-function drawBarcode(doc: jsPDF, x: number, y: number, value = '', height = 16, scale = 1) {
+// `targetWidth` is the actual mm width the barcode will occupy, not a loose
+// multiplier - the previous "scale" parameter didn't correspond to real
+// output width (scale=1 rendered ~55mm wide regardless of where it was
+// positioned), which is how the barcode ended up drawn straight off the edge
+// of the page on the sanction letter.
+function drawBarcode(doc: jsPDF, x: number, y: number, value = '', height = 16, targetWidth = 34) {
   const seed = value || 'DHANI-FINANCES';
   const bars = Array.from({ length: 38 }, (_, idx) => {
     const code = seed.charCodeAt(idx % seed.length) + idx * 17;
     return (code % 3) + 1;
   });
+  const totalUnits = bars.reduce((sum, width) => sum + width, 0);
+  const unitScale = targetWidth / (totalUnits * 0.72);
   let cursor = x;
   doc.setFillColor(0, 0, 0);
   bars.forEach((width, idx) => {
-    if (idx % 2 === 0) doc.rect(cursor, y, width * 0.55 * scale, height, 'F');
-    cursor += width * 0.72 * scale;
+    if (idx % 2 === 0) doc.rect(cursor, y, width * 0.55 * unitScale, height, 'F');
+    cursor += width * 0.72 * unitScale;
   });
 }
 
@@ -192,14 +189,15 @@ async function addQrImageOrFallback(doc: jsPDF, data: string, x: number, y: numb
   try {
     const response = await fetch(qrUrl);
     if (!response.ok) throw new Error('QR image request failed');
-    const blob = await response.blob();
-    const dataUrl = await new Promise<string>((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onload = () => resolve(String(reader.result));
-      reader.onerror = reject;
-      reader.readAsDataURL(blob);
-    });
-    doc.addImage(dataUrl, 'PNG', x, y, size, size);
+    const arrayBuffer = await response.arrayBuffer();
+    // This PDF builder now also runs server-side (to attach the same letter to
+    // approval emails), where FileReader/Blob-to-data-URL conversion doesn't
+    // exist. Buffer covers Node; btoa covers the browser - both produce the
+    // same base64 payload from the same bytes.
+    const base64 = typeof Buffer !== 'undefined'
+      ? Buffer.from(arrayBuffer).toString('base64')
+      : btoa(Array.from(new Uint8Array(arrayBuffer), (byte) => String.fromCharCode(byte)).join(''));
+    doc.addImage(`data:image/png;base64,${base64}`, 'PNG', x, y, size, size);
   } catch {
     drawVerificationQr(doc, x, y, size / 15);
   }
@@ -241,7 +239,7 @@ export function generateApplicationAcknowledgement(app: LoanApplication, setting
   doc.setFont('helvetica', 'bold');
   doc.text('Requested Loan Amount:', 18, y + 22);
   doc.setFont('helvetica', 'normal');
-  doc.text(formatINR(app.requestedAmount), 70, y + 22);
+  doc.text(formatPDF_INR(app.requestedAmount), 70, y + 22);
 
   doc.setFont('helvetica', 'bold');
   doc.text('Requested Tenure:', 18, y + 29);
@@ -311,7 +309,7 @@ export function generateProvisionalEligibilityLetter(app: LoanApplication, setti
   doc.setFontSize(9);
   doc.setTextColor(51, 65, 85);
   doc.setFont('helvetica', 'normal');
-  doc.text(`Max Eligible Amount: ${formatINR(result?.maxEligibleAmount || app.requestedAmount)}`, 18, y + 16);
+  doc.text(`Max Eligible Amount: ${formatPDF_INR(result?.maxEligibleAmount || app.requestedAmount)}`, 18, y + 16);
   doc.text(`Indicative Interest Rate: ${result?.recommendedInterestRate || 12.5}% p.a.`, 18, y + 22);
   doc.text(`Indicative Tenure: ${result?.maxEligibleTenure || app.requestedTenureMonths} Months`, 18, y + 28);
   doc.text(`Assessed FOIR Ratio: ${result?.foirPercent || 35}%`, 18, y + 34);
@@ -330,171 +328,260 @@ export function generateProvisionalEligibilityLetter(app: LoanApplication, setti
 }
 
 // 3. Official Loan Approval / Sanction Letter
-export async function buildSanctionLetterPdf(app: LoanApplication, settings: CompanySettings) {
+//
+// Layout follows a single top-to-bottom flow cursor (`y`) through every
+// section - header, title, applicant/loan details, letter body, processing
+// fee, payment accounts, notes, then the approval/QR row - instead of mixing
+// in hardcoded absolute coordinates. Each section only knows where the one
+// before it ended, so notes/QR/stamp/signature/footer can never overlap
+// regardless of how long the surrounding dynamic text turns out to be.
+export async function buildSanctionLetterPdf(app: LoanApplication, settings: CompanySettings, baseUrl?: string) {
   const doc = new jsPDF();
   const pageWidth = 210;
-  const margin = 11;
+  const pageHeight = 297;
+  const margin = 14;
+  const contentWidth = pageWidth - margin * 2;
+
   const approvalDateIso = app.approvalDate || new Date().toISOString();
   const approvalDate = formatDate(approvalDateIso);
-  const sanctionDate = formatDate(app.approvalDate || new Date().toISOString());
+  const sanctionDate = formatDate(approvalDateIso);
   const sanctionedAmount = app.approvedAmount || app.requestedAmount;
   const approvedRate = app.approvedRate || 12.5;
   const approvedTenure = app.approvedTenureMonths || app.requestedTenureMonths;
   const approvedEmi = app.approvedEmi || calculateEmi(sanctionedAmount, approvedRate, approvedTenure, 1.5).monthlyEmi;
   const processingFee = app.processingFee || Math.round((sanctionedAmount * 1.5) / 100);
   const yearText = `${Math.floor(approvedTenure / 12)} Years, ${approvedTenure % 12} Months`;
-  const borrowerAddress = [
-    app.personalInfo.currentAddress,
-    app.personalInfo.city,
-    app.personalInfo.state,
-    app.personalInfo.pincode,
-  ].filter(Boolean).join(', ');
 
   const money = (amount: number) => `INR ${Math.round(amount || 0).toLocaleString('en-IN')}/-`;
-  const writeWrapped = (text: string, x: number, y: number, maxWidth: number, lineHeight = 5.7) => {
+  const writeWrapped = (text: string, x: number, y: number, maxWidth: number, lineHeight = 5.4) => {
     const lines = doc.splitTextToSize(text, maxWidth);
     doc.text(lines, x, y);
     return y + lines.length * lineHeight;
   };
-  const field = (label: string, value: string, x: number, y: number, valueX = 48) => {
-    doc.setFont('helvetica', 'bold');
-    doc.setTextColor(0, 0, 0);
-    doc.text(`${label} -`, x, y);
-    doc.text(value || '-', valueX, y);
-  };
-  const origin = typeof window !== 'undefined' ? window.location.origin : settings.companyName;
+
+  // This builder now also runs server-side to attach the letter to the approval
+  // email, where there is no `window` - callers there pass the app's configured
+  // public APP_URL instead. In the browser this still resolves to whatever
+  // domain the customer is actually on (never a hardcoded "localhost").
+  const origin = baseUrl || (typeof window !== 'undefined' ? window.location.origin : '');
   const payeeName = settings.collectionAccountHolderName || settings.upiAccountName || settings.companyName;
   const payeeAccount = settings.collectionAccountNumber || 'Set by admin';
   const payeeIfsc = settings.collectionIfscCode || 'Set by admin';
   const payeeBank = settings.collectionBankName || 'Official collection bank';
 
-  doc.setFillColor(255, 255, 255);
-  doc.rect(0, 0, pageWidth, 297, 'F');
+  // ---------------- Watermark ----------------
+  // Drawn first so every later, opaque element paints over it - a large,
+  // very light diagonal wordmark in the page background, matching common
+  // official-letter styling.
+  doc.setFont('helvetica', 'bolditalic');
+  doc.setFontSize(64);
+  doc.setTextColor(234, 240, 250);
+  doc.text(settings.companyName, pageWidth / 2, pageHeight / 2, { angle: 35, align: 'center' });
 
-  // Top letterhead
-  drawDhaniLogo(doc, margin + 1, 11, 1.28);
+  // ---------------- Header ----------------
+  // Bespoke to this letter (not the shared drawHeader used by the other
+  // generated documents, which must not change): a bigger logo lockup with
+  // the address/contact block to its right, a solid colour band underneath.
+  const logoWidth = 34;
+  const logoHeight = logoWidth * DHANI_LOGO_ASPECT_RATIO;
+  doc.addImage(DHANI_LOGO_DATA_URI, 'JPEG', margin, 8, logoWidth, logoHeight);
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(9.5);
+  doc.setTextColor(11, 25, 44);
+  doc.text(settings.companyName.toUpperCase(), margin, 8 + logoHeight + 5);
 
   doc.setFont('helvetica', 'bold');
-  doc.setFontSize(10.5);
-  doc.setTextColor(8, 20, 38);
-  doc.text(settings.registeredAddress || settings.branchAddress, pageWidth - margin, 12, { align: 'right', maxWidth: 112 });
+  doc.setFontSize(9);
+  doc.setTextColor(15, 23, 42);
+  const headerAddressLines = doc.splitTextToSize(settings.registeredAddress || settings.branchAddress || '', 110);
+  doc.text(headerAddressLines, pageWidth - margin, 10, { align: 'right' });
   doc.setFont('helvetica', 'normal');
-  doc.setFontSize(9.2);
-  doc.text(`${settings.supportEmail}  |  ${settings.supportPhone}`, pageWidth - margin, 31, { align: 'right' });
+  doc.text(settings.supportEmail, pageWidth - margin, 10 + headerAddressLines.length * 4.2, { align: 'right' });
 
+  let y = 28;
   doc.setFillColor(37, 99, 235);
-  doc.rect(0, 38, pageWidth, 12, 'F');
+  doc.rect(0, y, pageWidth, 7, 'F');
+  y += 15;
 
+  // ---------------- Title ----------------
   doc.setFont('helvetica', 'bold');
-  doc.setFontSize(17);
-  doc.setTextColor(0, 0, 0);
-  doc.text('Loan Approval Letter', pageWidth / 2, 62, { align: 'center' });
-  drawBarcode(doc, 150, 54, app.id, 19, 1.12);
+  doc.setFontSize(15);
+  doc.setTextColor(15, 23, 42);
+  doc.text('Loan Approval Letter', pageWidth / 2, y, { align: 'center' });
+  drawBarcode(doc, pageWidth - margin - 34, y - 7, app.id, 12, 34);
+  y += 10;
 
-  let y = 75;
-  const leftX = margin + 4;
-  doc.setFontSize(11.2);
-  doc.setFont('helvetica', 'bold');
-  doc.setTextColor(0, 0, 0);
-  field('Name', app.personalInfo.fullName.toUpperCase(), leftX, y, 58); y += 6.2;
-  field('Application no', app.id, leftX, y, 58); y += 6.2;
-  field('Loan Amount', money(sanctionedAmount), leftX, y, 58); y += 6.2;
-  field('Period', yearText, leftX, y, 58); y += 6.2;
-  field('Monthly EMI', money(approvedEmi), leftX, y, 58); y += 6.2;
-  field('Loan Type', app.productTitle, leftX, y, 58); y += 8;
+  // ---------------- Applicant / Loan Details ----------------
+  const field = (label: string, value: string) => {
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(10);
+    doc.setTextColor(0, 0, 0);
+    doc.text(`${label} -`, margin, y);
+    doc.text(value || '-', margin + 42, y);
+    y += 6;
+  };
+  field('Name', app.personalInfo.fullName.toUpperCase());
+  field('Application no', app.id);
+  field('Loan Amount', money(sanctionedAmount));
+  field('Period', yearText);
+  field('Monthly EMI', money(approvedEmi));
+  field('Interest Rate', `${approvedRate}% p.a.`);
+  field('Loan Type', app.productTitle);
+  y += 3;
 
-  doc.setFontSize(10.9);
-  doc.text('Respected Sir/Madam,', leftX, y);
-  y += 6;
+  // ---------------- Approval Letter Content ----------------
+  // Copy is unchanged from the original letter - only alignment/spacing/width
+  // were fixed here (the second paragraph previously started at a different
+  // left edge than the rest, which read as a random indent).
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(10.3);
   doc.setTextColor(17, 24, 39);
-  y = writeWrapped(`We are very glad to inform you that in response to your request for a loan in order to meet your financial needs. At the outset we welcome you to meet of ${settings.companyName}.`, leftX, y, 181, 5.7) + 3;
+  doc.text('Respected Sir/Madam,', margin, y);
+  y += 6;
+  y = writeWrapped(`We are very glad to inform you that in response to your request for a loan in order to meet your financial needs. At the outset we welcome you to meet of ${settings.companyName}.`, margin, y, contentWidth) + 2;
+  y = writeWrapped(`You requested a short term loan, Sum of loan amount ${money(sanctionedAmount)} for the tenure of ${yearText} on dated ${approvalDate}. Your monthly EMI INR: ${money(approvedEmi).replace('INR ', '')} at the rate of ${approvedRate}% including rate of interest.`, margin, y, contentWidth) + 2;
+  y = writeWrapped(`When you submit amount of File Processing Fee legal consideration charge fee ${money(processingFee)}. After that it is our responsibility to hand over your approved loan value of ${money(sanctionedAmount)} in your bank account after verify your credit ability.`, margin, y, contentWidth) + 2;
+  y = writeWrapped('Please continue your loan process without Hesitation.', margin, y, contentWidth) + 4;
 
-  y = writeWrapped(`You requested a short term loan, Sum of loan amount ${money(sanctionedAmount)} for the tenure of ${yearText} on dated ${approvalDate}. Your monthly EMI INR: ${money(approvedEmi).replace('INR ', '')} at the rate of ${approvedRate}% including rate of interest.`, leftX + 12, y, 160, 5.7) + 3;
-
-  y = writeWrapped(`When you submit amount of File Processing Fee legal consideration charge fee ${money(processingFee)}. After that it is our responsibility to hand over your approved loan value of ${money(sanctionedAmount)} in your bank account after verify your credit ability.`, leftX, y, 181, 5.7) + 2;
-  y = writeWrapped('Please continue your loan process without Hesitation.', leftX, y, 181, 5.7) + 2;
-
+  // ---------------- Processing Fee Information ----------------
   doc.setFont('helvetica', 'bold');
-  doc.text(`Processing fee Legal Consideration ${money(processingFee)}`, leftX, y);
-
-  y += 8;
-  const accountTop = y;
-  doc.setFontSize(10.6);
-  doc.setFont('helvetica', 'bold');
-  doc.setTextColor(0, 0, 0);
-  doc.text('Pay at This Account', leftX, accountTop);
-  doc.text('Credit Customer Account', 112, accountTop);
-
-  y = accountTop + 8.4;
-  doc.setTextColor(28, 39, 94);
-  doc.setFontSize(9.7);
-  doc.text('Name. -', leftX, y);
-  doc.text(payeeName, leftX + 24, y, { maxWidth: 70 });
-  doc.text('Name. -', 112, y);
-  doc.text(app.personalInfo.fullName.toUpperCase(), 136, y, { maxWidth: 60 });
-  y += 7.4;
-  doc.text('A/c No. -', leftX, y);
-  doc.text(payeeAccount, leftX + 24, y, { maxWidth: 70 });
-  doc.text('A/c No. -', 112, y);
-  doc.text(maskAccount(app.financialInfo.accountNumber), 136, y, { maxWidth: 58 });
-  y += 7.4;
-  doc.text('IFSC Code -', leftX, y);
-  doc.text(payeeIfsc, leftX + 31, y, { maxWidth: 62 });
-  doc.text('IFSC Code -', 112, y);
-  doc.text(app.financialInfo.ifscCode || 'To be verified', 145, y, { maxWidth: 50 });
-  y += 7.4;
-  doc.text(payeeBank.toUpperCase(), leftX + 31, y, { maxWidth: 70 });
-  doc.text((app.financialInfo.bankName || 'Customer Bank').toUpperCase(), 145, y, { maxWidth: 50 });
-
-  y += 9;
-  doc.setFont('helvetica', 'bolditalic');
-  doc.setTextColor(190, 24, 55);
   doc.setFontSize(10);
-  doc.text('Note:-', leftX, y);
+  doc.setTextColor(0, 0, 0);
+  doc.text(`Processing fee Legal Consideration ${money(processingFee)}`, margin, y);
+  y += 9;
+
+  // ---------------- Payment Account + Customer Account ----------------
+  const colGap = 6;
+  const colWidth = (contentWidth - colGap) / 2;
+  const col1X = margin;
+  const col2X = margin + colWidth + colGap;
+  const valueOffset = 22;
+  const valueMaxWidth = colWidth - valueOffset;
+
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(10);
+  doc.setTextColor(0, 0, 0);
+  doc.text('Pay at This Account', col1X, y);
+  doc.text('Credit Customer Account', col2X, y);
   y += 7;
+
+  const accountRow = (label: string, payeeValue: string, customerValue: string, rowY: number) => {
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(9);
+    doc.setTextColor(28, 39, 94);
+    doc.text(`${label} -`, col1X, rowY);
+    doc.text(`${label} -`, col2X, rowY);
+    doc.text(payeeValue || '-', col1X + valueOffset, rowY, { maxWidth: valueMaxWidth });
+    doc.text(customerValue || '-', col2X + valueOffset, rowY, { maxWidth: valueMaxWidth });
+  };
+  accountRow('Name', payeeName, app.personalInfo.fullName.toUpperCase(), y); y += 6.5;
+  accountRow('A/c No.', payeeAccount, maskAccount(app.financialInfo.accountNumber), y); y += 6.5;
+  accountRow('IFSC Code', payeeIfsc, app.financialInfo.ifscCode || 'To be verified', y); y += 6.5;
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(9);
+  doc.setTextColor(28, 39, 94);
+  doc.text(payeeBank.toUpperCase(), col1X + valueOffset, y, { maxWidth: valueMaxWidth });
+  doc.text((app.financialInfo.bankName || 'Customer Bank').toUpperCase(), col2X + valueOffset, y, { maxWidth: valueMaxWidth });
+  y += 9;
+
+  // ---------------- Important Notes ----------------
+  // This section must fully finish rendering (and `y` must reflect exactly
+  // where it ended) before the approval/QR row below is allowed to start.
+  doc.setFont('helvetica', 'bolditalic');
+  doc.setFontSize(10);
+  doc.setTextColor(190, 24, 55);
+  doc.text('Note:-', margin, y);
+  y += 6.5;
+  doc.setFontSize(8.8);
   const notes = [
     'We do not accept cash deposit.',
-    'We accept only NEFT/IMPS/Mobile banking/Net Banking/UPI/Other authorized digital modes.',
-    'Processing fee will be refundable within 24 hours if the application is not finally disbursed.',
+    'We accept only NEFT/IMPS/Mobile banking/Net Banking/Other.',
+    'Processing fee will be refundable within 24 hours.',
   ];
   notes.forEach((note, idx) => {
-    y = writeWrapped(`${idx + 1}. ${note}`, leftX + 9, y, 168, 5.7) + 1;
+    y = writeWrapped(`${idx + 1}. ${note}`, margin + 4, y, contentWidth - 4, 4.8) + 0.8;
   });
+  y += 5;
 
-  const footerY = 251;
+  // ---------------- Approval / Verification Area ----------------
+  // Three columns starting at the same row (grievance/support | approval
+  // stamp + verification | QR). Each column's own height is measured, and the
+  // footer is placed below the tallest one - not a guessed constant - so it
+  // can never land on top of whichever column happens to run longest.
+  const rowTop = y;
+  const colGrievanceX = margin;
+  const colStampX = margin + 60;
+  const qrSize = 28;
+  const colQrX = pageWidth - margin - qrSize;
+
   doc.setFont('helvetica', 'bold');
-  doc.setFontSize(11.2);
-  doc.setTextColor(0, 0, 0);
-  doc.text('Your Truely', leftX, footerY);
-  doc.text(settings.authorizedSignatoryName || 'Authorized Signatory', leftX, footerY + 11);
+  doc.setFontSize(9.6);
+  doc.setTextColor(15, 23, 42);
+  doc.text('Your Truly,', colGrievanceX, rowTop);
+  doc.setFontSize(8.4);
+  doc.text(settings.authorizedSignatoryName || 'Authorized Signatory', colGrievanceX, rowTop + 8, { maxWidth: 54 });
   doc.setFont('helvetica', 'normal');
-  doc.text(settings.authorizedSignatoryTitle || 'Customer Business', leftX, footerY + 17);
+  doc.setFontSize(7.8);
+  doc.setTextColor(71, 85, 105);
+  const grievanceEndY = writeWrapped(settings.authorizedSignatoryTitle || 'Customer Business', colGrievanceX, rowTop + 13, 54, 4.4);
+  const colGrievanceHeight = grievanceEndY - rowTop;
 
-  doc.setDrawColor(91, 106, 171);
-  doc.setTextColor(91, 106, 171);
-  doc.setFont('helvetica', 'bolditalic');
-  doc.setFontSize(11);
-  doc.circle(57, footerY + 5, 13, 'S');
-  doc.circle(57, footerY + 5, 10, 'S');
-  doc.text('APPROVED', 57, footerY + 3, { align: 'center', angle: -18 });
-  doc.setFontSize(8);
-  doc.text('M.D.', 57, footerY + 8, { align: 'center' });
-  doc.setFontSize(9);
-  doc.text('Verified By', 91, footerY + 9, { angle: -12 });
-  doc.setFontSize(7.2);
-  doc.text('E-signed and Verified', 91, footerY + 13, { angle: -12 });
-  doc.line(80, footerY + 16, 121, footerY + 6);
+  // Circular seal with a signature-style flourish underneath, echoing the
+  // official-stamp look without relying on rotated text baselines (which are
+  // hard to reason about for overlap) for anything except the stamp label.
+  doc.setDrawColor(76, 29, 149);
+  doc.setTextColor(76, 29, 149);
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(7.6);
+  doc.circle(colStampX + 12, rowTop + 10, 11, 'S');
+  doc.circle(colStampX + 12, rowTop + 10, 8.4, 'S');
+  doc.text('LOAN', colStampX + 12, rowTop + 6.5, { align: 'center' });
+  doc.text('APPROVED', colStampX + 12, rowTop + 10, { align: 'center' });
+  doc.setFontSize(6);
+  doc.text('M.D.', colStampX + 12, rowTop + 13.5, { align: 'center' });
+  doc.setDrawColor(51, 65, 85);
+  doc.setLineWidth(0.5);
+  doc.line(colStampX + 26, rowTop + 19, colStampX + 50, rowTop + 11);
+  doc.setFont('helvetica', 'italic');
+  doc.setFontSize(7.6);
+  doc.setTextColor(51, 65, 85);
+  doc.text('Verified By', colStampX + 26, rowTop + 22, { angle: 12 });
+  doc.setFontSize(6.6);
+  doc.text('E-signed & Verified', colStampX + 26, rowTop + 25.5);
+  const colStampHeight = 25.5;
 
   const verificationUrl = `${origin}/track-status?applicationId=${encodeURIComponent(app.id)}`;
-  await addQrImageOrFallback(doc, verificationUrl, 145, 238, 41);
+  await addQrImageOrFallback(doc, verificationUrl, colQrX, rowTop, qrSize);
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(7.4);
+  doc.setTextColor(51, 65, 85);
+  doc.text('Scan to Verify', colQrX + qrSize / 2, rowTop + qrSize + 4.5, { align: 'center' });
+  const colQrHeight = qrSize + 7;
+
+  y = rowTop + Math.max(colGrievanceHeight, colStampHeight, colQrHeight) + 5;
+
+  // ---------------- Footer ----------------
+  // Anchors near the bottom margin on a normally-short letter, but slides down
+  // with the content if it runs long, and never past a hard ceiling that would
+  // push the footer text off the printable page. Reserves enough room for the
+  // registered address line plus the two reference/legal lines below it.
+  const footerY = Math.min(Math.max(y, pageHeight - 34), pageHeight - 20);
+  doc.setDrawColor(226, 232, 240);
+  doc.setLineWidth(0.3);
+  doc.line(margin, footerY, pageWidth - margin, footerY);
+
   doc.setFont('helvetica', 'normal');
-  doc.setFontSize(7.6);
-  doc.setTextColor(71, 85, 105);
-  doc.text(`Verify: ${origin}/track-status`, 145, 282);
-  doc.text(`Ref: SANC/${app.id}/2026 | Issued: ${sanctionDate}`, margin, 291);
-  doc.text(`${settings.nbfcLicenseInfo} | ${settings.registrationNumber}`, pageWidth - margin, 291, { align: 'right' });
+  doc.setFontSize(7.4);
+  doc.setTextColor(100, 116, 139);
+  const footerAddressLines = doc.splitTextToSize(settings.registeredAddress || settings.branchAddress || '', contentWidth);
+  doc.text(footerAddressLines, margin, footerY + 4.5);
+  const afterAddressY = footerY + 4.5 + footerAddressLines.length * 3.4;
+
+  doc.setFontSize(7);
+  doc.setTextColor(148, 163, 184);
+  doc.text(`Verify online: ${origin}/track-status`, margin, afterAddressY + 3.6);
+  doc.text(`Ref: SANC/${app.id}/2026 | Issued: ${sanctionDate}`, margin, afterAddressY + 7.4);
+  doc.text(`${settings.nbfcLicenseInfo} | ${settings.registrationNumber}`, pageWidth - margin, afterAddressY + 7.4, { align: 'right' });
 
   return doc;
 }
@@ -502,6 +589,15 @@ export async function buildSanctionLetterPdf(app: LoanApplication, settings: Com
 export async function generateSanctionLetter(app: LoanApplication, settings: CompanySettings) {
   const doc = await buildSanctionLetterPdf(app, settings);
   doc.save(`DhaniFinance_Sanction_${app.id}.pdf`);
+}
+
+// Server-side only: produces the exact same letter as generateSanctionLetter
+// above (there is one PDF-building function - buildSanctionLetterPdf - this
+// and generateSanctionLetter are just two different outputs of it), as raw
+// bytes suitable for an email attachment instead of a browser download.
+export async function buildSanctionLetterBuffer(app: LoanApplication, settings: CompanySettings, baseUrl?: string): Promise<Buffer> {
+  const doc = await buildSanctionLetterPdf(app, settings, baseUrl);
+  return Buffer.from(doc.output('arraybuffer'));
 }
 
 // 4. General Loan Section Letter
@@ -950,7 +1046,7 @@ export function generatePaymentReceiptPDF(receipt: Receipt, settings: CompanySet
   doc.setFont('helvetica', 'normal');
   doc.text(`Customer Name: ${receipt.customerName}`, 18, y + 18);
   doc.text(`Loan Account / App ID: ${receipt.loanAccountId || receipt.applicationId}`, 18, y + 25);
-  doc.text(`Amount Paid: ${formatINR(receipt.amountPaid)}`, 18, y + 32);
+  doc.text(`Amount Paid: ${formatPDF_INR(receipt.amountPaid)}`, 18, y + 32);
   doc.text(`UPI UTR / Reference No: ${receipt.utrNumber}`, 18, y + 39);
   doc.text(`Payment Date: ${formatDate(receipt.paymentDate)}`, 18, y + 46);
 
@@ -958,7 +1054,7 @@ export function generatePaymentReceiptPDF(receipt: Receipt, settings: CompanySet
   doc.setFont('helvetica', 'bold');
   doc.text('Account Balance Status:', 14, y); y += 6;
   doc.setFont('helvetica', 'normal');
-  doc.text(`Remaining Outstanding Balance: ${formatINR(receipt.remainingBalance)}`, 18, y); y += 5;
+  doc.text(`Remaining Outstanding Balance: ${formatPDF_INR(receipt.remainingBalance)}`, 18, y); y += 5;
   doc.text(`Next EMI Due Date: ${formatDate(receipt.nextDueDate)}`, 18, y);
 
   drawSignatures(doc, settings, 210);

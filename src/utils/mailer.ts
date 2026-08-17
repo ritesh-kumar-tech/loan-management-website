@@ -1,6 +1,7 @@
 import nodemailer from 'nodemailer';
 import { ApplicationStatus, CompanySettings, LoanApplication, PaymentSubmission, SupportTicket } from '../types';
 import { getStatusMeta } from './statusConfig';
+import { buildSanctionLetterBuffer } from './pdfGenerator';
 
 type SendEmailInput = {
   to?: string;
@@ -10,6 +11,7 @@ type SendEmailInput = {
   replyTo?: string;
   emailType?: string;
   applicationId?: string;
+  attachments?: { filename: string; content: Buffer }[];
 };
 
 type TemplateContent = {
@@ -186,6 +188,7 @@ export const sendEmail = async (settings: CompanySettings, input: SendEmailInput
       html: input.html,
       text: input.text,
       replyTo: input.replyTo || process.env.MAIL_REPLY_TO || settings.supportEmail,
+      attachments: input.attachments,
     });
     logEmailResult({ ...input, to }, 'sent');
     return { success: true };
@@ -295,17 +298,31 @@ const statusTemplates: Partial<Record<ApplicationStatus, (settings: CompanySetti
     ],
     details: baseApplicationDetails(app),
   }),
-  approved: (settings, app) => ({
-    subject: 'Your Loan Application Has Been Approved',
-    heading: 'Loan Application Approved',
-    intro: [
-      `Hello ${app.personalInfo?.fullName || 'Applicant'},`,
-      `Good news! Your loan application #${app.id} has been approved.`,
-      'Please log in or follow the official instructions provided to complete the next step of your application.',
-    ],
-    details: baseApplicationDetails(app),
-    nextSteps: ['If payment is required for the next stage, please use only the official payment method available through Dhani Finances.'],
-  }),
+  approved: (settings, app) => {
+    const approvedAmount = app.approvedAmount || app.requestedAmount;
+    const approvedTenure = app.approvedTenureMonths || app.requestedTenureMonths;
+    const trackingUrl = `${process.env.APP_URL || ''}/track-status`;
+    return {
+      subject: `Loan Application Update - ${app.id}`,
+      heading: 'Your Loan Has Been Approved',
+      intro: [
+        `Dear ${app.personalInfo?.fullName || 'Applicant'},`,
+        `Your loan application ${app.id} has been updated to Approved.`,
+        'Please review the attached approval letter for the complete details.',
+      ],
+      details: [
+        { label: 'Application Number', value: app.id },
+        { label: 'Loan Amount', value: formatCurrency(approvedAmount) },
+        { label: 'Loan Type', value: app.productTitle },
+        { label: 'Tenure', value: approvedTenure ? `${approvedTenure} months` : undefined },
+        { label: 'Monthly EMI', value: formatCurrency(app.approvedEmi) },
+      ],
+      nextSteps: [
+        'If payment is required for the next stage, please use only the official payment method available through Dhani Finances.',
+        `You can also track your application through the official application tracking page: ${trackingUrl}`,
+      ],
+    };
+  },
   rejected: (settings, app) => ({
     subject: 'Update Regarding Your Loan Application',
     heading: 'Loan Application Update',
@@ -397,10 +414,29 @@ export const sendApplicationStatusEmail = async (
 
   const content = template(settings, app);
   const rendered = renderEmail(settings, content);
+
+  // The approval email attaches the exact same PDF the customer/admin would
+  // download from the app (buildSanctionLetterBuffer wraps the same
+  // buildSanctionLetterPdf used for the on-screen download) - there is only
+  // ever one letter-generation function, never a second email-only version.
+  let attachments: { filename: string; content: Buffer }[] | undefined;
+  if (app.status === 'approved') {
+    try {
+      const pdfBuffer = await buildSanctionLetterBuffer(app, settings, process.env.APP_URL);
+      attachments = [{ filename: `Loan-Approval-${app.id}.pdf`, content: pdfBuffer }];
+    } catch (error) {
+      console.error(`Failed to generate approval letter attachment for application ${app.id}:`, error);
+      // Fall through and send the approval notification without the
+      // attachment rather than losing the notification entirely over a PDF
+      // rendering problem.
+    }
+  }
+
   return sendEmail(settings, {
     to: app.personalInfo?.email,
     subject: content.subject,
     ...rendered,
+    attachments,
     emailType: `application_${app.status}`,
     applicationId: app.id,
   });

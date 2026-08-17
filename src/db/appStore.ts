@@ -1,5 +1,6 @@
 import { defaultCmsContent, defaultSettings } from '../data/mockDatabase';
 import {
+  applicationIdExists as sqliteApplicationIdExists,
   findUserAuthByEmail as findSqliteUserAuthByEmail,
   getCollections as getSqliteCollections,
   initializeDatabase as initializeSqliteDatabase,
@@ -22,6 +23,7 @@ import {
   findMysqlUserAuthByEmail,
   getMysqlCollections,
   initializeMysqlDatabase,
+  mysqlApplicationIdExists,
   saveMysqlApplication,
   saveMysqlAuditLog,
   saveMysqlCmsContent,
@@ -56,6 +58,17 @@ export const getCollections = async () => {
 export const findUserAuthByEmail = async (email: string) => {
   if (isMysql()) return findMysqlUserAuthByEmail(email);
   return findSqliteUserAuthByEmail(email);
+};
+
+// Authoritative uniqueness check against the database itself, not just the
+// in-process `applications` array. Each server process only sees its own
+// in-memory copy, so two processes (or a restarted process whose array no
+// longer matches the DB row count) can independently compute the same
+// sequential ID; because saveApplication upserts, that collision previously
+// went undetected and silently overwrote a different customer's record.
+export const applicationIdExists = async (id: string): Promise<boolean> => {
+  if (isMysql()) return mysqlApplicationIdExists(id);
+  return sqliteApplicationIdExists(id);
 };
 
 export const saveSettings = (value: any) => (isMysql() ? saveMysqlSettings(value) : saveSqliteSettings(value));

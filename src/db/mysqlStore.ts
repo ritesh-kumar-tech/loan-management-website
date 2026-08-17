@@ -80,6 +80,11 @@ export const getMysqlCollections = async (fallbacks: { settings: CompanySettings
   eligibilityRules: await tableData<AnyRecord>('eligibility_rules'),
 });
 
+export const mysqlApplicationIdExists = async (id: string): Promise<boolean> => {
+  const [rows] = await pool.query<mysql.RowDataPacket[]>('SELECT 1 FROM applications WHERE id = ? LIMIT 1', [id]);
+  return rows.length > 0;
+};
+
 export const findMysqlUserAuthByEmail = async (email: string) => {
   const [rows] = await pool.query<mysql.RowDataPacket[]>(
     'SELECT data_json, password_hash FROM users WHERE lower(email) = lower(?) LIMIT 1',
