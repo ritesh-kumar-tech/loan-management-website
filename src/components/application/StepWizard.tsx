@@ -112,8 +112,8 @@ export const StepWizard: React.FC<StepWizardProps> = ({
   const [eligibilityResult, setEligibilityResult] = useState<EligibilityResult | null>(null);
   const selectedProduct = products.find((p) => p.id === productId) || products[0];
   const requiredDocumentNames = selectedProduct?.requiredDocs?.length ? selectedProduct.requiredDocs : ['PAN Card', 'Aadhaar Card', 'Passport-size Photograph', 'Bank Statement'];
-  const applicationSteps = ['Loan', 'Personal & Banking', 'Review'];
-  const visibleStep = Math.min(currentStep, 3);
+  const applicationSteps = ['Loan', 'Personal & Banking', 'Documents', 'Review'];
+  const visibleStep = Math.min(currentStep, 4);
   const maskPan = (value: string) => value?.length === 10 ? `${value.slice(0, 5)}****${value.slice(9)}` : value || '-';
   const maskAccount = (value: string) => {
     const clean = String(value || '').replace(/\s/g, '');
@@ -202,6 +202,12 @@ export const StepWizard: React.FC<StepWizardProps> = ({
         setStepError('Please enter a valid 11-character IFSC code (e.g. HDFC0001234).');
         return false;
       }
+    } else if (step === 3) {
+      const missingDocs = requiredDocumentNames.filter((docName) => !documents.some((doc) => doc.docType === docName.toLowerCase().replace(/[^a-z0-9]+/g, '_')));
+      if (missingDocs.length) {
+        setStepError(`Please upload all required documents: ${missingDocs.join(', ')}.`);
+        return false;
+      }
     }
     return true;
   };
@@ -248,6 +254,12 @@ export const StepWizard: React.FC<StepWizardProps> = ({
   };
 
   const handleFinalSubmit = async () => {
+    const missingDocs = requiredDocumentNames.filter((docName) => !documents.some((doc) => doc.docType === docName.toLowerCase().replace(/[^a-z0-9]+/g, '_')));
+    if (missingDocs.length) {
+      setCurrentStep(3);
+      setUploadError(`Please upload required documents: ${missingDocs.join(', ')}.`);
+      return;
+    }
     setSubmitting(true);
     try {
       const assessedMonthlyIncome = financial.monthlyIncome || employment.monthlyIncome || selectedProduct.minIncome || 50000;
@@ -295,9 +307,9 @@ export const StepWizard: React.FC<StepWizardProps> = ({
   return (
     <div className="max-w-4xl mx-auto px-4 py-8">
       {/* Progress Bar */}
-      {currentStep <= 3 && (
+      {currentStep <= 4 && (
       <div className="mb-8">
-        <div className="hidden sm:grid grid-cols-3 gap-2 mb-4">
+        <div className="hidden sm:grid grid-cols-4 gap-2 mb-4">
           {applicationSteps.map((label, idx) => {
             const stepNo = idx + 1;
             const isActive = currentStep === stepNo;
@@ -312,13 +324,13 @@ export const StepWizard: React.FC<StepWizardProps> = ({
           })}
         </div>
         <div className="flex items-center justify-between text-xs font-bold text-slate-500 mb-2">
-          <span>Step {visibleStep} of 3: {applicationSteps[visibleStep - 1]}</span>
-          <span>{Math.round((visibleStep / 3) * 100)}% Completed</span>
+          <span>Step {visibleStep} of 4: {applicationSteps[visibleStep - 1]}</span>
+          <span>{Math.round((visibleStep / 4) * 100)}% Completed</span>
         </div>
         <div className="w-full h-2 bg-slate-200 rounded-full overflow-hidden">
           <div
             className="h-full bg-blue-700 transition-all duration-300"
-            style={{ width: `${(visibleStep / 3) * 100}%` }}
+            style={{ width: `${(visibleStep / 4) * 100}%` }}
           />
         </div>
       </div>
@@ -568,11 +580,95 @@ export const StepWizard: React.FC<StepWizardProps> = ({
             </div>
           </div>
         )}
-        {/* STEP 3: Review & Declarations */}
+        {/* STEP 3: Document Upload */}
         {currentStep === 3 && (
           <div className="space-y-6">
+            <div className="border-b border-slate-100 pb-3">
+              <h2 className="text-xl font-extrabold text-slate-900">Step 3: Upload KYC & Income Documents</h2>
+              <p className="text-sm text-slate-500 mt-1">Upload PDF, JPG, JPEG, or PNG files. Maximum 5 MB per document.</p>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              {requiredDocumentNames.map((docName) => {
+                const docItem = { type: docName.toLowerCase().replace(/[^a-z0-9]+/g, '_'), label: `${docName} *` };
+                const uploaded = documents.find((d) => d.docType === docItem.type);
+                return (
+                  <div key={docItem.type} className="p-4 rounded-xl border border-slate-200 bg-slate-50 space-y-2">
+                    <span className="text-xs font-bold text-slate-800 block">{docItem.label}</span>
+                    {uploaded ? (
+                      <div className="p-3 rounded-xl bg-white border border-emerald-200 space-y-3">
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="min-w-0">
+                            <span className="font-bold text-slate-900 text-xs truncate block" title={uploaded.fileName}>{uploaded.fileName}</span>
+                            <span className="text-[10px] text-slate-500">{fileSize(uploaded.fileUrl)}</span>
+                          </div>
+                          <span className="px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 text-[10px] font-black uppercase shrink-0">Uploaded</span>
+                        </div>
+                        <div className="grid grid-cols-3 gap-2">
+                          <button
+                            type="button"
+                            onClick={() => setPreviewDoc(uploaded)}
+                            className="min-h-9 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-800 text-[11px] font-bold inline-flex items-center justify-center gap-1 cursor-pointer"
+                          >
+                            <Eye className="w-3.5 h-3.5" /> View
+                          </button>
+                          <label className="min-h-9 rounded-lg bg-blue-50 hover:bg-blue-100 text-blue-800 text-[11px] font-bold inline-flex items-center justify-center gap-1 cursor-pointer">
+                            <RefreshCw className="w-3.5 h-3.5" /> Replace
+                            <input
+                              type="file"
+                              accept=".pdf,.jpg,.jpeg,.png,application/pdf,image/jpeg,image/png"
+                              onChange={(e) => {
+                                if (e.target.files?.[0] && window.confirm(`Replace ${docName}?`)) {
+                                  handleDocumentUpload(docItem.type, docItem.label, e.target.files[0]);
+                                }
+                                e.currentTarget.value = '';
+                              }}
+                              className="hidden"
+                            />
+                          </label>
+                          <button
+                            type="button"
+                            onClick={() => handleRemoveDocument(docItem.type)}
+                            className="min-h-9 rounded-lg bg-rose-50 hover:bg-rose-100 text-rose-700 text-[11px] font-bold inline-flex items-center justify-center gap-1 cursor-pointer"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" /> Remove
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      <label className="block p-3 rounded-lg border border-dashed border-slate-300 bg-white text-center cursor-pointer hover:bg-slate-100 transition-colors">
+                        <Upload className="w-4 h-4 text-slate-400 mx-auto mb-1" />
+                        <span className="text-xs text-slate-600 font-medium block">Select File (PDF / JPG)</span>
+                        <span className="text-[10px] text-slate-400 block mt-1">Max 5 MB. Unsafe executable files are blocked.</span>
+                        <input
+                          type="file"
+                          accept=".pdf,.jpg,.jpeg,.png,application/pdf,image/jpeg,image/png"
+                          onChange={(e) => {
+                            if (e.target.files?.[0]) {
+                              handleDocumentUpload(docItem.type, docItem.label, e.target.files[0]);
+                            }
+                          }}
+                          className="hidden"
+                        />
+                      </label>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+            {uploadError && (
+              <div className="p-3 rounded-xl bg-rose-50 border border-rose-200 text-rose-800 text-xs font-semibold">
+                {uploadError}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* STEP 4: Review & Declarations */}
+        {currentStep === 4 && (
+          <div className="space-y-6">
             <h2 className="text-xl font-extrabold text-slate-900 border-b border-slate-100 pb-3">
-              Step 3: Final Review & Declarations
+              Step 4: Final Review & Declarations
             </h2>
 
             <div className="space-y-4">
@@ -598,6 +694,34 @@ export const StepWizard: React.FC<StepWizardProps> = ({
                 <ReviewRow label="Bank Name" value={financial.bankName} />
                 <ReviewRow label="Bank Account" value={maskAccount(financial.accountNumber)} />
                 <ReviewRow label="IFSC" value={financial.ifscCode} />
+              </ReviewSection>
+
+              <ReviewSection title="Documents" onEdit={() => setCurrentStep(3)}>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                  {requiredDocumentNames.map((docName) => {
+                    const docType = docName.toLowerCase().replace(/[^a-z0-9]+/g, '_');
+                    const uploaded = documents.find((doc) => doc.docType === docType);
+                    return (
+                      <div key={docType} className="rounded-xl border border-slate-200 bg-white px-3 py-2 flex items-center justify-between gap-2">
+                        <div className="min-w-0">
+                          <span className="block text-xs font-bold text-slate-900">{docName}</span>
+                          <span className={`block text-[11px] font-semibold ${uploaded ? 'text-emerald-700' : 'text-rose-700'}`}>
+                            {uploaded ? '✓ Uploaded' : 'Missing'}
+                          </span>
+                        </div>
+                        {uploaded && (
+                          <button
+                            type="button"
+                            onClick={() => setPreviewDoc(uploaded)}
+                            className="px-2.5 py-1 rounded-lg bg-slate-100 text-[10px] font-bold text-slate-700 cursor-pointer"
+                          >
+                            View
+                          </button>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
               </ReviewSection>
             </div>
 
@@ -727,7 +851,7 @@ export const StepWizard: React.FC<StepWizardProps> = ({
               <ChevronLeft className="w-4 h-4" /> {currentStep === 1 ? 'Cancel' : 'Back'}
             </button>
 
-            {currentStep < 3 ? (
+            {currentStep < 4 ? (
               <button
                 onClick={handleNextStep}
                 className="px-6 py-2.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-white text-sm font-semibold flex items-center gap-1 cursor-pointer shadow-sm"

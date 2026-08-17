@@ -25,7 +25,14 @@ import {
   saveUser,
 } from './src/db/appStore';
 import { hashPassword, maskApplicationForPublic, verifyPassword } from './src/db/security';
-import { maskEmail, sendApplicationConfirmationEmail, sendOtpEmail } from './src/utils/mailer';
+import {
+  maskEmail,
+  sendApplicationConfirmationEmail,
+  sendApplicationStatusEmail,
+  sendOtpEmail,
+  sendPaymentReceivedEmail,
+  sendSupportTicketEmails,
+} from './src/utils/mailer';
 
 interface CreateAppOptions {
   serveClient?: boolean;
@@ -449,15 +456,17 @@ export async function createApp({ serveClient = true }: CreateAppOptions = {}) {
     });
   });
 
-  app.post('/api/applications', (req, res) => {
+  app.post('/api/applications', async (req, res) => {
     const data = req.body;
     let appItem: LoanApplication;
+    let isNewApplication = false;
 
     if (data.id && applications.some((a) => a.id === data.id)) {
       const idx = applications.findIndex((a) => a.id === data.id);
       appItem = { ...applications[idx], ...data, updatedAt: new Date().toISOString() };
       applications[idx] = appItem;
     } else {
+      isNewApplication = true;
       const appSeq = String(applications.length + 101).padStart(6, '0');
       const newId = `LN-2026-${appSeq}`;
       appItem = {
@@ -473,12 +482,15 @@ export async function createApp({ serveClient = true }: CreateAppOptions = {}) {
       applications.unshift(appItem);
     }
 
-    saveApplication(appItem);
-    void sendApplicationConfirmationEmail(settings, appItem.personalInfo?.email, {
-      applicantName: appItem.personalInfo?.fullName || 'Applicant',
-      applicationId: appItem.id,
-      status: appItem.status,
-    }).catch((error) => console.error('Application confirmation email failed', error));
+    await saveApplication(appItem);
+    if (isNewApplication) {
+      void sendApplicationConfirmationEmail(settings, appItem.personalInfo?.email, {
+        applicantName: appItem.personalInfo?.fullName || 'Applicant',
+        applicationId: appItem.id,
+        status: appItem.status,
+        applicationDate: appItem.createdAt,
+      });
+    }
     addNotification({
       userId: 'usr_admin_1',
       title: 'Application saved',
@@ -500,7 +512,7 @@ export async function createApp({ serveClient = true }: CreateAppOptions = {}) {
   });
 
   // Application Status Change (Admin approval, rejection, request info)
-  app.patch('/api/applications/:id/status', (req, res) => {
+  app.patch('/api/applications/:id/status', async (req, res) => {
     const { id } = req.params;
     const { status, note, approvedAmount, approvedRate, approvedTenureMonths, processingFee, rejectionReason } = req.body;
 
@@ -511,13 +523,16 @@ export async function createApp({ serveClient = true }: CreateAppOptions = {}) {
     }
 
     const appItem = applications[idx];
+    const previousStatus = appItem.status;
     appItem.status = status as ApplicationStatus;
-    appItem.statusHistory.push({
-      status: status as ApplicationStatus,
-      date: new Date().toISOString(),
-      note: note || `Status updated to ${status}`,
-      updatedBy: 'Admin',
-    });
+    if (previousStatus !== status) {
+      appItem.statusHistory.push({
+        status: status as ApplicationStatus,
+        date: new Date().toISOString(),
+        note: note || `Status updated to ${status}`,
+        updatedBy: 'Admin',
+      });
+    }
 
     if (approvedAmount) appItem.approvedAmount = Number(approvedAmount);
     if (approvedRate) appItem.approvedRate = Number(approvedRate);
@@ -573,13 +588,14 @@ export async function createApp({ serveClient = true }: CreateAppOptions = {}) {
           createdAt: new Date().toISOString(),
         };
         loanAccounts.unshift(newLoanAccount);
-        saveLoanAccount(newLoanAccount);
+        await saveLoanAccount(newLoanAccount);
       }
     }
 
     appItem.updatedAt = new Date().toISOString();
     applications[idx] = appItem;
-    saveApplication(appItem);
+    await saveApplication(appItem);
+    void sendApplicationStatusEmail(settings, appItem, previousStatus);
 
     addNotification({
       userId: appItem.userId || 'usr_guest',
@@ -593,7 +609,7 @@ export async function createApp({ serveClient = true }: CreateAppOptions = {}) {
   });
 
   // Admin Request Processing Fee (Only allowed if all docs are verified)
-  app.post('/api/applications/:id/request-processing-fee', (req, res) => {
+  app.post('/api/applications/:id/request-processing-fee', async (req, res) => {
     const { id } = req.params;
     const { feeAmount } = req.body;
     const appItem = applications.find((a) => a.id === id);
@@ -614,16 +630,20 @@ export async function createApp({ serveClient = true }: CreateAppOptions = {}) {
     }
 
     const fee = Number(feeAmount) || appItem.processingFee || 2000;
+    const previousStatus = appItem.status;
     appItem.processingFee = fee;
     appItem.status = 'processing_fee_pending';
-    appItem.statusHistory.push({
-      status: 'processing_fee_pending',
-      date: new Date().toISOString(),
-      note: `Processing fee requested by Admin: ₹${fee.toLocaleString('en-IN')}`,
-      updatedBy: 'Admin',
-    });
+    if (previousStatus !== 'processing_fee_pending') {
+      appItem.statusHistory.push({
+        status: 'processing_fee_pending',
+        date: new Date().toISOString(),
+        note: `Processing fee requested by Admin: ₹${fee.toLocaleString('en-IN')}`,
+        updatedBy: 'Admin',
+      });
+    }
     appItem.updatedAt = new Date().toISOString();
-    saveApplication(appItem);
+    await saveApplication(appItem);
+    void sendApplicationStatusEmail(settings, appItem, previousStatus);
 
     addNotification({
       userId: appItem.userId || 'usr_guest',
@@ -647,7 +667,7 @@ export async function createApp({ serveClient = true }: CreateAppOptions = {}) {
   });
 
   // Payments: Submit Proof
-  app.post('/api/payments/submit', (req, res) => {
+  app.post('/api/payments/submit', async (req, res) => {
     const { loanAccountId, applicationId, userId, customerName, amount, purpose, utrNumber, proofScreenshotUrl, installmentNumber } = req.body;
 
     // Check duplicate UTR
@@ -676,7 +696,7 @@ export async function createApp({ serveClient = true }: CreateAppOptions = {}) {
     };
 
     paymentSubmissions.unshift(newPayment);
-    savePaymentSubmission(newPayment);
+    await savePaymentSubmission(newPayment);
     addNotification({
       userId: 'usr_admin_1',
       title: 'Payment submitted',
@@ -697,7 +717,7 @@ export async function createApp({ serveClient = true }: CreateAppOptions = {}) {
           updatedBy: 'Customer',
         });
         appItem.updatedAt = new Date().toISOString();
-        saveApplication(appItem);
+        await saveApplication(appItem);
       }
     }
 
@@ -710,7 +730,7 @@ export async function createApp({ serveClient = true }: CreateAppOptions = {}) {
   });
 
   // Payments: Admin Verification / Approval
-  app.post('/api/payments/:id/verify', (req, res) => {
+  app.post('/api/payments/:id/verify', async (req, res) => {
     const { id } = req.params;
     const { action, note } = req.body; // 'approve' | 'reject'
 
@@ -721,6 +741,8 @@ export async function createApp({ serveClient = true }: CreateAppOptions = {}) {
     }
 
     const pay = paymentSubmissions[payIdx];
+    const previousPaymentStatus = pay.status;
+    let verifiedApplication: LoanApplication | undefined;
     if (action === 'approve') {
       pay.status = 'verified';
       pay.verificationNote = note || 'Verified with bank statement';
@@ -734,6 +756,7 @@ export async function createApp({ serveClient = true }: CreateAppOptions = {}) {
       if (pay.purpose === 'processing_fee' && pay.applicationId) {
         const appItem = applications.find((a) => a.id === pay.applicationId);
         if (appItem) {
+          verifiedApplication = appItem;
           appItem.status = 'payment_verified';
           appItem.statusHistory.push({
             status: 'payment_verified',
@@ -742,9 +765,10 @@ export async function createApp({ serveClient = true }: CreateAppOptions = {}) {
             updatedBy: 'Admin',
           });
           appItem.updatedAt = new Date().toISOString();
-          saveApplication(appItem);
+          await saveApplication(appItem);
         }
       }
+      verifiedApplication = verifiedApplication || applications.find((a) => a.id === pay.applicationId);
 
       // Update Loan Account schedule
       const loan = loanAccounts.find((l) => l.accountNumber === pay.loanAccountId || l.applicationId === pay.applicationId);
@@ -768,7 +792,7 @@ export async function createApp({ serveClient = true }: CreateAppOptions = {}) {
             nextDue = loan.schedule[instIdx + 1].dueDate;
           }
         }
-        saveLoanAccount(loan);
+        await saveLoanAccount(loan);
       }
 
       const newReceipt: Receipt = {
@@ -787,7 +811,7 @@ export async function createApp({ serveClient = true }: CreateAppOptions = {}) {
         qrVerificationCode: `${req.headers.origin || 'http://localhost:3000'}/verify-receipt?id=${receiptNo}`,
       };
       receipts.unshift(newReceipt);
-      saveReceipt(newReceipt);
+      await saveReceipt(newReceipt);
 
       addAuditLog('usr_admin_1', 'admin', 'admin@dhanifinance.in', 'PAYMENT_VERIFIED', 'PaymentSubmission', pay.id, `Approved payment UTR ${pay.utrNumber}`);
       addNotification({
@@ -811,7 +835,10 @@ export async function createApp({ serveClient = true }: CreateAppOptions = {}) {
     }
 
     paymentSubmissions[payIdx] = pay;
-    savePaymentSubmission(pay);
+    await savePaymentSubmission(pay);
+    if (action === 'approve' && previousPaymentStatus !== 'verified') {
+      void sendPaymentReceivedEmail(settings, verifiedApplication || applications.find((a) => a.id === pay.applicationId), pay);
+    }
     res.json({ success: true, payment: pay });
   });
 
@@ -831,14 +858,14 @@ export async function createApp({ serveClient = true }: CreateAppOptions = {}) {
     res.json({ success: true, tickets: supportTickets });
   });
 
-  app.post('/api/support/tickets', (req, res) => {
-    const { ticketId, sender, text, category, subject, userId, customerName } = req.body;
+  app.post('/api/support/tickets', async (req, res) => {
+    const { ticketId, sender, text, category, subject, userId, customerName, customerEmail, email, phone, applicationId } = req.body;
     if (ticketId) {
       const idx = supportTickets.findIndex((t) => t.id === ticketId);
       if (idx >= 0) {
         supportTickets[idx].messages.push({ sender, text, date: new Date().toISOString() });
         supportTickets[idx].updatedAt = new Date().toISOString();
-        saveSupportTicket(supportTickets[idx]);
+        await saveSupportTicket(supportTickets[idx]);
         addNotification({
           userId: sender === 'support' ? supportTickets[idx].userId : 'usr_admin_1',
           title: sender === 'support' ? 'Support replied' : 'Customer support message',
@@ -851,13 +878,23 @@ export async function createApp({ serveClient = true }: CreateAppOptions = {}) {
       }
     }
 
-    const newTicket: SupportTicket = {
+    const matchedUser = users.find((u) => u.id === userId);
+    const matchedApplication = applicationId
+      ? applications.find((a) => a.id === applicationId)
+      : applications.find((a) => a.userId === userId);
+    const resolvedCustomerEmail = customerEmail || email || matchedUser?.email || matchedApplication?.personalInfo?.email;
+    const resolvedPhone = phone || matchedUser?.mobile || matchedApplication?.personalInfo?.mobile;
+
+    const newTicket: SupportTicket & { customerEmail?: string; phone?: string } = {
       id: `TKT-${Math.floor(1000 + Math.random() * 9000)}`,
       userId: userId || 'usr_customer_1',
       customerName: customerName || 'Aniket Verma',
       category: category || 'General Query',
       subject: subject || 'Help Request',
       description: text,
+      applicationId: applicationId || matchedApplication?.id,
+      customerEmail: resolvedCustomerEmail,
+      phone: resolvedPhone,
       priority: 'medium',
       status: 'open',
       messages: [{ sender: 'customer', text, date: new Date().toISOString() }],
@@ -866,7 +903,8 @@ export async function createApp({ serveClient = true }: CreateAppOptions = {}) {
     };
 
     supportTickets.unshift(newTicket);
-    saveSupportTicket(newTicket);
+    await saveSupportTicket(newTicket);
+    void sendSupportTicketEmails(settings, newTicket, resolvedCustomerEmail);
     addNotification({
       userId: 'usr_admin_1',
       title: 'New support ticket',

@@ -271,6 +271,9 @@ export const api = {
     subject?: string;
     userId?: string;
     customerName?: string;
+    customerEmail?: string;
+    phone?: string;
+    applicationId?: string;
   }): Promise<SupportTicket> {
     const res = await fetch('/api/support/tickets', {
       method: 'POST',

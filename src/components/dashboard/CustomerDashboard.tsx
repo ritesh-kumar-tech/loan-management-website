@@ -105,6 +105,9 @@ export const CustomerDashboard: React.FC<CustomerDashboardProps> = ({
       subject: newTicketSubject,
       userId: user.id,
       customerName: user.fullName,
+      customerEmail: user.email,
+      phone: user.mobile,
+      applicationId: verifiedApplication.id,
     });
 
     setShowNewTicketModal(false);

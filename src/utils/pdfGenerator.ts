@@ -114,37 +114,37 @@ function drawDhaniLogo(doc: jsPDF, x: number, y: number, scale = 1) {
   const orange: [number, number, number] = [245, 139, 28];
   const green: [number, number, number] = [36, 196, 37];
 
+  doc.setFont('helvetica', 'bolditalic');
+  doc.setFontSize(15 * scale);
+  doc.setTextColor(...green);
+  doc.text('Dhani', x, y + 1 * scale);
+
+  doc.setDrawColor(...orange);
+  doc.setLineWidth(1.2 * scale);
+  doc.lines(
+    [
+      [12 * scale, -2.5 * scale],
+      [24 * scale, -3.5 * scale],
+      [38 * scale, -1 * scale],
+    ],
+    x + 28 * scale,
+    y - 2 * scale
+  );
+  doc.setFillColor(...orange);
+  doc.triangle(x + 71 * scale, y - 6 * scale, x + 66 * scale, y - 2 * scale, x + 69 * scale, y + 1.5 * scale, 'F');
+
   doc.setFillColor(...blue);
-  doc.circle(x + 5 * scale, y + 14 * scale, 5.2 * scale, 'F');
+  doc.circle(x + 6 * scale, y + 17 * scale, 6.4 * scale, 'F');
   doc.setFillColor(...blue);
-  doc.triangle(x + 2.3 * scale, y + 8 * scale, x + 7.7 * scale, y + 8 * scale, x + 5 * scale, y + 4.5 * scale, 'F');
+  doc.triangle(x + 2.5 * scale, y + 10 * scale, x + 9.5 * scale, y + 10 * scale, x + 6 * scale, y + 5.5 * scale, 'F');
   doc.setDrawColor(...blue);
   doc.setLineWidth(1.1 * scale);
-  doc.line(x + 2.1 * scale, y + 7.7 * scale, x + 7.9 * scale, y + 7.7 * scale);
+  doc.line(x + 2.2 * scale, y + 9.7 * scale, x + 9.8 * scale, y + 9.7 * scale);
 
   doc.setFont('helvetica', 'bolditalic');
   doc.setFontSize(26 * scale);
   doc.setTextColor(...blue);
-  doc.text('dhani', x + 12 * scale, y + 18 * scale);
-
-  doc.setDrawColor(...orange);
-  doc.setLineWidth(1.1 * scale);
-  doc.lines(
-    [
-      [13 * scale, -3.5 * scale],
-      [23 * scale, -4.5 * scale],
-      [34 * scale, -1.5 * scale],
-    ],
-    x + 14 * scale,
-    y + 1.5 * scale
-  );
-  doc.setFillColor(...orange);
-  doc.triangle(x + 47 * scale, y - 4 * scale, x + 43 * scale, y - 1 * scale, x + 45 * scale, y + 2 * scale, 'F');
-
-  doc.setFont('helvetica', 'bolditalic');
-  doc.setFontSize(12 * scale);
-  doc.setTextColor(...green);
-  doc.text('Dhani Finances', x, y - 1 * scale);
+  doc.text('dhani', x + 15 * scale, y + 21 * scale);
 }
 
 function drawBarcode(doc: jsPDF, x: number, y: number, value = '', height = 16, scale = 1) {
@@ -330,7 +330,7 @@ export function generateProvisionalEligibilityLetter(app: LoanApplication, setti
 }
 
 // 3. Official Loan Approval / Sanction Letter
-export async function generateSanctionLetter(app: LoanApplication, settings: CompanySettings) {
+export async function buildSanctionLetterPdf(app: LoanApplication, settings: CompanySettings) {
   const doc = new jsPDF();
   const pageWidth = 210;
   const margin = 11;
@@ -496,6 +496,11 @@ export async function generateSanctionLetter(app: LoanApplication, settings: Com
   doc.text(`Ref: SANC/${app.id}/2026 | Issued: ${sanctionDate}`, margin, 291);
   doc.text(`${settings.nbfcLicenseInfo} | ${settings.registrationNumber}`, pageWidth - margin, 291, { align: 'right' });
 
+  return doc;
+}
+
+export async function generateSanctionLetter(app: LoanApplication, settings: CompanySettings) {
+  const doc = await buildSanctionLetterPdf(app, settings);
   doc.save(`DhaniFinance_Sanction_${app.id}.pdf`);
 }
 

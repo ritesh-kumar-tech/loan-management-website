@@ -267,6 +267,8 @@ export interface SupportTicket {
   id: string; // TKT-XXXX
   userId: string;
   customerName: string;
+  customerEmail?: string;
+  phone?: string;
   category: string;
   subject: string;
   description: string;
