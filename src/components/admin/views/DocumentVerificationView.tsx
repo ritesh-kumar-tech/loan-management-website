@@ -25,6 +25,7 @@ export const DocumentVerificationView: React.FC<DocumentVerificationViewProps> =
   const [docFilter, setDocFilter] = useState<string>('pending');
   const [selectedDocItem, setSelectedDocItem] = useState<{ app: LoanApplication; doc: any } | null>(null);
   const [rejectionNote, setRejectionNote] = useState('');
+  const [changingDecision, setChangingDecision] = useState(false);
 
   // Flatten all documents across applications
   const allDocuments: { app: LoanApplication; doc: any }[] = [];
@@ -46,6 +47,13 @@ export const DocumentVerificationView: React.FC<DocumentVerificationViewProps> =
     await onVerifyDocument(selectedDocItem.app.id, selectedDocItem.doc.id, status, rejectionNote);
     setSelectedDocItem(null);
     setRejectionNote('');
+    setChangingDecision(false);
+  };
+
+  const closeInspector = () => {
+    setSelectedDocItem(null);
+    setRejectionNote('');
+    setChangingDecision(false);
   };
 
   return (
@@ -105,12 +113,21 @@ export const DocumentVerificationView: React.FC<DocumentVerificationViewProps> =
               </div>
 
               <div className="flex items-center justify-between pt-1">
-                <button
-                  onClick={() => setSelectedDocItem({ app, doc })}
-                  className="w-full py-2 rounded-xl bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs flex items-center justify-center gap-1.5 cursor-pointer"
-                >
-                  <Eye className="w-3.5 h-3.5" /> Inspect Document
-                </button>
+                {doc.status === 'pending' ? (
+                  <button
+                    onClick={() => setSelectedDocItem({ app, doc })}
+                    className="w-full py-2 rounded-xl bg-blue-700 hover:bg-blue-800 text-white font-bold text-xs flex items-center justify-center gap-1.5 cursor-pointer"
+                  >
+                    <FileCheck2 className="w-3.5 h-3.5" /> Verify Document
+                  </button>
+                ) : (
+                  <button
+                    onClick={() => setSelectedDocItem({ app, doc })}
+                    className="w-full py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs flex items-center justify-center gap-1.5 cursor-pointer"
+                  >
+                    <Eye className="w-3.5 h-3.5" /> View Document
+                  </button>
+                )}
               </div>
             </div>
           ))
@@ -124,9 +141,11 @@ export const DocumentVerificationView: React.FC<DocumentVerificationViewProps> =
             <div className="flex items-center justify-between border-b border-slate-100 pb-3">
               <div>
                 <span className="font-mono text-xs font-bold text-orange-600">{selectedDocItem.app.id}</span>
-                <h3 className="text-base font-extrabold text-slate-900">{selectedDocItem.doc.title} Inspection</h3>
+                <h3 className="text-base font-extrabold text-slate-900">
+                  {selectedDocItem.doc.title} {selectedDocItem.doc.status === 'pending' ? 'Inspection' : 'Details'}
+                </h3>
               </div>
-              <button onClick={() => setSelectedDocItem(null)} className="text-slate-400 hover:text-slate-800 cursor-pointer">
+              <button onClick={closeInspector} className="text-slate-400 hover:text-slate-800 cursor-pointer">
                 <X className="w-5 h-5" />
               </button>
             </div>
@@ -142,41 +161,70 @@ export const DocumentVerificationView: React.FC<DocumentVerificationViewProps> =
               </div>
             </div>
 
-            {/* Rejection Note */}
-            <div>
-              <label className="block font-bold text-xs text-slate-700 mb-1">Verification / Rejection Comments</label>
-              <input
-                type="text"
-                value={rejectionNote}
-                onChange={(e) => setRejectionNote(e.target.value)}
-                placeholder="e.g. Document image clear and matches PAN record."
-                className="w-full p-2.5 rounded-xl border border-slate-200 text-xs"
-              />
-            </div>
+            {selectedDocItem.doc.status !== 'pending' && !changingDecision ? (
+              <>
+                <div className={`p-3 rounded-xl border text-xs font-semibold ${
+                  selectedDocItem.doc.status === 'verified'
+                    ? 'bg-emerald-50 border-emerald-200 text-emerald-800'
+                    : 'bg-rose-50 border-rose-200 text-rose-800'
+                }`}>
+                  This document has already been {selectedDocItem.doc.status}.
+                  {selectedDocItem.doc.rejectionNote && <span className="block mt-1 font-normal">Note: {selectedDocItem.doc.rejectionNote}</span>}
+                </div>
+                <div className="flex items-center justify-between pt-2">
+                  <button
+                    onClick={() => setChangingDecision(true)}
+                    className="text-xs font-bold text-slate-500 hover:text-slate-800 cursor-pointer underline"
+                  >
+                    Change decision
+                  </button>
+                  <button
+                    onClick={closeInspector}
+                    className="px-4 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-800 font-bold text-xs cursor-pointer"
+                  >
+                    Close
+                  </button>
+                </div>
+              </>
+            ) : (
+              <>
+                {/* Rejection Note */}
+                <div>
+                  <label className="block font-bold text-xs text-slate-700 mb-1">Verification / Rejection Comments</label>
+                  <input
+                    type="text"
+                    value={rejectionNote}
+                    onChange={(e) => setRejectionNote(e.target.value)}
+                    placeholder="e.g. Document image clear and matches PAN record."
+                    className="w-full p-2.5 rounded-xl border border-slate-200 text-xs"
+                  />
+                </div>
 
-            <div className="flex items-center justify-between pt-2">
-              <div className="flex items-center gap-2">
-                <button
-                  onClick={() => handleAction('verified')}
-                  className="px-4 py-2 rounded-xl bg-blue-700 hover:bg-blue-800 text-white font-bold text-xs flex items-center gap-1.5 cursor-pointer shadow-xs"
-                >
-                  <CheckCircle2 className="w-4 h-4" /> Approve Document
-                </button>
-                <button
-                  onClick={() => handleAction('rejected')}
-                  className="px-4 py-2 rounded-xl bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs flex items-center gap-1.5 cursor-pointer"
-                >
-                  <XCircle className="w-4 h-4" /> Reject Document
-                </button>
-              </div>
+                <div className="flex items-center justify-between pt-2">
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => handleAction('verified')}
+                      className="px-4 py-2 rounded-xl bg-blue-700 hover:bg-blue-800 text-white font-bold text-xs flex items-center gap-1.5 cursor-pointer shadow-xs"
+                    >
+                      <CheckCircle2 className="w-4 h-4" /> Approve Document
+                    </button>
+                    <button
+                      onClick={() => handleAction('rejected')}
+                      className="px-4 py-2 rounded-xl bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs flex items-center gap-1.5 cursor-pointer"
+                    >
+                      <XCircle className="w-4 h-4" /> Reject Document
+                    </button>
+                  </div>
 
-              <button
-                onClick={() => setSelectedDocItem(null)}
-                className="text-xs font-bold text-slate-500 hover:text-slate-800 cursor-pointer"
-              >
-                Close
-              </button>
-            </div>
+                  <button
+                    onClick={closeInspector}
+                    className="text-xs font-bold text-slate-500 hover:text-slate-800 cursor-pointer"
+                  >
+                    Close
+                  </button>
+                </div>
+              </>
+            )}
           </div>
         </div>
       )}

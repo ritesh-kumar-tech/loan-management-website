@@ -141,6 +141,29 @@ export async function createApp({ serveClient = true }: CreateAppOptions = {}) {
   let cmsContent = collections.cmsContent;
   let eligibilityRules = collections.eligibilityRules;
 
+  // Installments are seeded/created as 'due' or 'upcoming' and nothing ever
+  // advanced them to 'overdue' as their due date passed unpaid - every
+  // overdue-based metric (dashboard KPIs, reports, risk distribution) was
+  // reading a status that could never actually occur. Recompute it lazily,
+  // on read, rather than storing a value that would go stale between requests.
+  const refreshOverdueStatus = (loan: any) => {
+    if (!loan?.schedule) return loan;
+    const now = Date.now();
+    loan.schedule.forEach((inst: any) => {
+      if (
+        (inst.status === 'due' || inst.status === 'upcoming') &&
+        inst.paidAmount < inst.emiAmount &&
+        new Date(inst.dueDate).getTime() < now
+      ) {
+        inst.status = 'overdue';
+      }
+    });
+    loan.totalOverdue = loan.schedule
+      .filter((inst: any) => inst.status === 'overdue')
+      .reduce((sum: number, inst: any) => sum + Math.max(0, inst.emiAmount - inst.paidAmount), 0);
+    return loan;
+  };
+
   // Helper log audit
   const addAuditLog = (userId: string, role: string, email: string, action: string, entityType: string, entityId: string, details: string) => {
     const log = {
@@ -632,9 +655,9 @@ export async function createApp({ serveClient = true }: CreateAppOptions = {}) {
       return;
     }
 
-    const matchingLoan = loanAccounts.find(
+    const matchingLoan = refreshOverdueStatus(loanAccounts.find(
       (l) => l.applicationId === appItem.id || (l.userId && l.userId === appItem.userId)
-    ) || null;
+    ) || null);
 
     addAuditLog('public', 'guest', rawSearch, 'TRACKING_ACCESSED', 'LoanApplication', appItem.id, 'Customer portal accessed by application ID or mobile number');
 
@@ -961,6 +984,7 @@ export async function createApp({ serveClient = true }: CreateAppOptions = {}) {
 
   // Loan Accounts
   app.get('/api/loan-accounts', (req, res) => {
+    loanAccounts.forEach(refreshOverdueStatus);
     const { userId } = req.query;
     if (userId) {
       res.json({ success: true, loanAccounts: loanAccounts.filter((l) => l.userId === userId) });
@@ -1126,17 +1150,25 @@ export async function createApp({ serveClient = true }: CreateAppOptions = {}) {
       }
       verifiedApplication = verifiedApplication || applications.find((a) => a.id === pay.applicationId);
 
-      // Update Loan Account schedule
+      // Update Loan Account schedule. Only an EMI payment repays the loan
+      // itself - a processing fee is unrelated to the principal ledger, so
+      // it must never touch outstandingPrincipal or mark an installment paid.
       const loan = loanAccounts.find((l) => l.accountNumber === pay.loanAccountId || l.applicationId === pay.applicationId);
       let remBalance = loan ? loan.outstandingPrincipal : 0;
       let nextDue = new Date().toISOString();
 
-      if (loan) {
+      if (loan && pay.purpose === 'emi') {
+        const instIdx = loan.schedule.findIndex((s) => s.installmentNumber === pay.installmentNumber || s.status === 'due');
+        // An EMI is principal + interest; only the principal portion of this
+        // specific installment actually pays down the loan's outstanding
+        // principal - subtracting the full EMI amount (as this previously
+        // did) overstated principal repayment by the interest component
+        // every month, running the ledger to zero far too early.
+        const principalComponent = instIdx >= 0 ? loan.schedule[instIdx].principalComponent : pay.amount;
         loan.totalPaid += pay.amount;
-        loan.outstandingPrincipal = Math.max(0, loan.outstandingPrincipal - pay.amount);
+        loan.outstandingPrincipal = Math.max(0, loan.outstandingPrincipal - principalComponent);
         remBalance = loan.outstandingPrincipal;
 
-        const instIdx = loan.schedule.findIndex((s) => s.installmentNumber === pay.installmentNumber || s.status === 'due');
         if (instIdx >= 0) {
           loan.schedule[instIdx].status = 'paid';
           loan.schedule[instIdx].paidAmount = pay.amount;
@@ -1160,6 +1192,7 @@ export async function createApp({ serveClient = true }: CreateAppOptions = {}) {
         amountPaid: pay.amount,
         paymentMethod: 'UPI',
         utrNumber: pay.utrNumber,
+        installmentNumber: pay.installmentNumber,
         paymentDate: pay.paymentDate,
         verificationDate: new Date().toISOString(),
         remainingBalance: remBalance,
@@ -1371,6 +1404,7 @@ export async function createApp({ serveClient = true }: CreateAppOptions = {}) {
   });
 
   app.get('/api/admin/dashboard/summary', requireRole('admin'), (req, res) => {
+    loanAccounts.forEach(refreshOverdueStatus);
     const activeLoans = loanAccounts.filter((loan) => loan.status === 'active');
     const pendingPayments = paymentSubmissions.filter((payment) => payment.status === 'pending_verification');
     const verifiedPayments = paymentSubmissions.filter((payment) => payment.status === 'verified');
@@ -1610,19 +1644,33 @@ export async function createApp({ serveClient = true }: CreateAppOptions = {}) {
   });
 
   if (serveClient) {
-    // Vite middleware for development
-    if (process.env.NODE_ENV !== 'production') {
-      const vite = await createViteServer({
-        server: { middlewareMode: true },
-        appType: 'spa',
-      });
-      app.use(vite.middlewares);
-    } else {
-      const distPath = path.join(process.cwd(), 'dist');
+    const distPath = path.join(process.cwd(), 'dist');
+    const distIndexExists = fs.existsSync(path.join(distPath, 'index.html'));
+
+    const serveBuiltClient = () => {
       app.use(express.static(distPath));
       app.get('*', (req, res) => {
         res.sendFile(path.join(distPath, 'index.html'));
       });
+    };
+
+    if (process.env.NODE_ENV !== 'production') {
+      // If the Vite dev middleware fails to start (e.g. a stale/missing dev
+      // dependency), fall back to serving the last build instead of leaving
+      // the SPA route fallback unregistered — otherwise every client-side
+      // route (e.g. /admin/dashboard) responds with a bare "Cannot GET" 404.
+      try {
+        const vite = await createViteServer({
+          server: { middlewareMode: true },
+          appType: 'spa',
+        });
+        app.use(vite.middlewares);
+      } catch (err) {
+        console.error('Vite dev middleware failed to start:', err);
+        if (distIndexExists) serveBuiltClient();
+      }
+    } else {
+      serveBuiltClient();
     }
   }
 

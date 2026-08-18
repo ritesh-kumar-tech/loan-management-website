@@ -244,6 +244,7 @@ export const seedDatabaseIfEmpty = (force = false) => {
         amountPaid: payment.amount,
         paymentMethod: 'UPI',
         utrNumber: payment.utrNumber,
+        installmentNumber: payment.installmentNumber,
         paymentDate: payment.paymentDate,
         verificationDate: payment.verifiedAt || now(),
         remainingBalance: 0,

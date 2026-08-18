@@ -66,6 +66,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ settings, onUpda
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(() => localStorage.getItem('adminSidebarCollapsed') === 'true');
   const [openMenu, setOpenMenu] = useState(() => localStorage.getItem('adminOpenMenu') || 'dashboard');
   const [dateRange, setDateRange] = useState('last_30_days');
+  const [customRangeStart, setCustomRangeStart] = useState('');
+  const [customRangeEnd, setCustomRangeEnd] = useState('');
 
   const [applications, setApplications] = useState<LoanApplication[]>([]);
   const [loanAccounts, setLoanAccounts] = useState<LoanAccount[]>([]);
@@ -78,8 +80,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ settings, onUpda
   const [auditLogs, setAuditLogs] = useState<AuditLog[]>([]);
   const [loading, setLoading] = useState(true);
 
-  const loadData = async () => {
-    setLoading(true);
+  const loadData = async (silent = false) => {
+    if (!silent) setLoading(true);
     try {
       const [appsData, loansData, paymentsData, receiptsData, productsData, customersData, staffData, ticketsData, logsData] = await Promise.all([
         api.getApplications(),
@@ -105,7 +107,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ settings, onUpda
     } catch (error) {
       console.error('Error loading admin portal data:', error);
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
   };
 
@@ -115,48 +117,48 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ settings, onUpda
 
   const handleUpdateApplicationStatus = async (appId: string, payload: any) => {
     await api.updateApplicationStatus(appId, payload);
-    await loadData();
+    await loadData(true);
   };
 
   const handleVerifyDocument = async (appId: string, docId: string, status: string, note?: string) => {
     await api.verifyDocument(appId, docId, status, note);
-    await loadData();
+    await loadData(true);
   };
 
   const handleVerifyPayment = async (paymentId: string, action: 'approve' | 'reject', note?: string) => {
     await api.verifyPayment(paymentId, action, note);
-    await loadData();
+    await loadData(true);
   };
 
   const handleSaveCustomer = async (cust: any) => {
     await api.saveCustomer(cust);
-    await loadData();
+    await loadData(true);
   };
 
   const handleSaveProduct = async (prod: LoanProduct) => {
     await api.saveLoanProduct(prod);
-    await loadData();
+    await loadData(true);
   };
 
   const handleSaveStaff = async (member: any) => {
     await api.saveStaff(member);
-    await loadData();
+    await loadData(true);
   };
 
   const handleSendSupportMessage = async (payload: { ticketId: string; sender: 'support'; text: string }) => {
     await api.sendSupportMessage(payload);
-    await loadData();
+    await loadData(true);
   };
 
   const handleAdjustLoan = async (accNo: string, payload: any) => {
     await api.adjustLoanAccount(accNo, payload);
-    await loadData();
+    await loadData(true);
   };
 
   const handleSaveSettings = async (newSettings: CompanySettings) => {
     await api.saveSettings(newSettings);
     onUpdateSettings(newSettings);
-    await loadData();
+    await loadData(true);
   };
 
   const pendingAppsCount = applications.filter((app) => app.status === 'submitted' || app.status === 'under_review').length;
@@ -272,7 +274,18 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ settings, onUpda
     if (activeSection === 'payments') return <PaymentVerificationView payments={payments} onVerifyPayment={handleVerifyPayment} />;
     if (activeSection === 'receipts') return <ReceiptsManagementView receipts={receipts} settings={settings} />;
     if (activeSection === 'products') return <ProductManagementView products={products} onSaveProduct={handleSaveProduct} />;
-    if (activeSection === 'reports') return <ReportsAnalyticsView applications={applications} loanAccounts={loanAccounts} payments={payments} />;
+    if (activeSection === 'reports') {
+      return (
+        <ReportsAnalyticsView
+          applications={applications}
+          loanAccounts={loanAccounts}
+          payments={payments}
+          dateRange={dateRange}
+          customRangeStart={customRangeStart}
+          customRangeEnd={customRangeEnd}
+        />
+      );
+    }
     if (activeSection === 'cms') return <WebsiteCmsView />;
     if (activeSection === 'support') return <SupportTicketsView tickets={tickets} onSendMessage={handleSendSupportMessage} />;
     if (activeSection === 'staff') return <StaffManagementView staff={staff} onSaveStaff={handleSaveStaff} />;
@@ -310,6 +323,17 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ settings, onUpda
               {isSidebarCollapsed ? <PanelLeftOpen className="w-4 h-4" /> : <><PanelLeftClose className="w-4 h-4" /> Collapse</>}
             </button>
           </div>
+
+          {onExitAdmin && (
+            <button
+              onClick={onExitAdmin}
+              title={isSidebarCollapsed ? 'View Public Website' : undefined}
+              className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl font-bold text-xs bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20 border border-emerald-500/20 transition-all ${isSidebarCollapsed ? 'justify-center' : ''}`}
+            >
+              <Globe className="w-4 h-4 shrink-0" />
+              <span className={isSidebarCollapsed ? 'hidden' : ''}>View Public Website</span>
+            </button>
+          )}
 
           <nav className="space-y-1 text-xs">
             {navigationGroups.map((group) => {
@@ -394,6 +418,23 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ settings, onUpda
               <option value="this_year">This Year</option>
               <option value="custom">Custom Range</option>
             </select>
+            {dateRange === 'custom' && (
+              <>
+                <input
+                  type="date"
+                  value={customRangeStart}
+                  onChange={(event) => setCustomRangeStart(event.target.value)}
+                  className="rounded-xl border border-slate-200 bg-white px-2.5 py-2 text-xs font-bold text-slate-700"
+                />
+                <span className="text-slate-400 text-xs">to</span>
+                <input
+                  type="date"
+                  value={customRangeEnd}
+                  onChange={(event) => setCustomRangeEnd(event.target.value)}
+                  className="rounded-xl border border-slate-200 bg-white px-2.5 py-2 text-xs font-bold text-slate-700"
+                />
+              </>
+            )}
             <button onClick={() => setActiveSection('applications')} className="px-4 py-2 bg-blue-700 hover:bg-blue-800 text-white font-bold text-xs rounded-xl shadow-2xs flex items-center gap-1.5">
               <FileText className="w-3.5 h-3.5" /> Review Applications
             </button>

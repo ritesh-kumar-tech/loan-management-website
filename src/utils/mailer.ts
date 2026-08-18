@@ -55,6 +55,18 @@ const fromAddress = (settings: CompanySettings) => {
 const supportAddress = (settings: CompanySettings) =>
   process.env.MAIL_REPLY_TO || settings.supportEmail || process.env.MAIL_FROM || 'support@dhani-finances.com';
 
+// Uploaded logos are saved under a relative /api/uploads/... path (see
+// server.ts's upload endpoint) so the SPA can resolve them against its own
+// origin. An email has no such origin, so a relative src would just be a
+// broken image in every inbox - absolutize it against APP_URL first.
+const absoluteLogoUrl = (settings: CompanySettings) => {
+  const url = settings.logoUrl || '';
+  if (!url) return '';
+  if (/^https?:\/\//i.test(url)) return url;
+  const base = (process.env.APP_URL || '').replace(/\/$/, '');
+  return `${base}${url.startsWith('/') ? '' : '/'}${url}`;
+};
+
 const statusLabel = (status?: string) => getStatusMeta(status).label;
 
 const formatDate = (value?: string) => {
@@ -104,8 +116,17 @@ const renderEmail = (settings: CompanySettings, content: TemplateContent) => {
           <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="max-width:640px;background:#ffffff;border:1px solid #dbe5f1;border-radius:8px;overflow:hidden;">
             <tr>
               <td style="background:#071B3D;color:#ffffff;padding:22px 24px;">
-                <div style="font-size:20px;font-weight:700;">${escapeHtml(settings.companyName)}</div>
-                <div style="font-size:12px;color:#cfe4ff;margin-top:4px;">${escapeHtml(settings.tagline || 'Loan application support')}</div>
+                <table role="presentation" cellspacing="0" cellpadding="0"><tr>
+                  ${
+                    absoluteLogoUrl(settings)
+                      ? `<td style="padding-right:12px;vertical-align:middle;"><img src="${escapeHtml(absoluteLogoUrl(settings))}" alt="${escapeHtml(settings.companyName)}" width="40" height="40" style="display:block;border-radius:8px;background:#ffffff;object-fit:cover;"></td>`
+                      : ''
+                  }
+                  <td style="vertical-align:middle;">
+                    <div style="font-size:20px;font-weight:700;">${escapeHtml(settings.companyName)}</div>
+                    <div style="font-size:12px;color:#cfe4ff;margin-top:4px;">${escapeHtml(settings.tagline || 'Loan application support')}</div>
+                  </td>
+                </tr></table>
               </td>
             </tr>
             <tr>
@@ -200,21 +221,18 @@ export const sendEmail = async (settings: CompanySettings, input: SendEmailInput
 };
 
 export const sendOtpEmail = async (settings: CompanySettings, email: string, otp: string, purposeLabel: string) => {
-  const subject = `${settings.companyName} verification code`;
-  const text = [
-    settings.companyName,
-    '',
-    purposeLabel,
-    '',
-    `Your verification code is: ${otp}`,
-    '',
-    'This code will expire in 5 minutes.',
-    'For your security, never share this code with anyone.',
-    'If you did not request this code, you can ignore this email.',
-  ].join('\n');
-
-  const html = `<p>${escapeHtml(purposeLabel)}</p><p>Your verification code is: <strong>${escapeHtml(otp)}</strong></p><p>This code will expire in 5 minutes.</p>`;
-  const result = await sendEmail(settings, { to: email, subject, html, text, emailType: 'otp' });
+  const content: TemplateContent = {
+    subject: `${settings.companyName} verification code`,
+    heading: 'Your Verification Code',
+    intro: [
+      purposeLabel,
+      `Your verification code is: ${otp}`,
+      'This code will expire in 5 minutes.',
+      'For your security, never share this code with anyone. If you did not request this code, you can ignore this email.',
+    ],
+  };
+  const rendered = renderEmail(settings, content);
+  const result = await sendEmail(settings, { to: email, subject: content.subject, ...rendered, emailType: 'otp' });
   if (!result.success) throw new Error(result.error || 'OTP email send failed');
 };
 

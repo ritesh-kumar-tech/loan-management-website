@@ -48,6 +48,10 @@ export const CustomerDashboard: React.FC<CustomerDashboardProps> = ({
   const [selectedAccountForPayment, setSelectedAccountForPayment] = useState<LoanAccount | null>(null);
   const [selectedProcessingFeeApp, setSelectedProcessingFeeApp] = useState<LoanApplication | null>(null);
 
+  // Repayment schedule pagination (per loan account)
+  const SCHEDULE_PAGE_SIZE = 12;
+  const [schedulePage, setSchedulePage] = useState<Record<string, number>>({});
+
   // New ticket state
   const [showNewTicketModal, setShowNewTicketModal] = useState(false);
   const [newTicketCategory, setNewTicketCategory] = useState('Payment Query');
@@ -486,46 +490,104 @@ export const CustomerDashboard: React.FC<CustomerDashboardProps> = ({
 
                 {/* Repayment Schedule */}
                 <div>
-                  <h4 className="text-xs font-bold text-slate-700 uppercase tracking-wider mb-2">Upcoming Installment Schedule</h4>
-                  <div className="overflow-x-auto">
-                    <table className="w-full text-left text-xs">
-                      <thead className="bg-slate-100 text-slate-700 font-bold uppercase">
-                        <tr>
-                          <th className="py-2 px-3">Inst #</th>
-                          <th className="py-2 px-3">Due Date</th>
-                          <th className="py-2 px-3">EMI Amount</th>
-                          <th className="py-2 px-3">Status</th>
-                          <th className="py-2 px-3">Action</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-slate-100">
-                        {loan.schedule.slice(0, 6).map((s) => (
-                          <tr key={s.installmentNumber}>
-                            <td className="py-2 px-3 font-semibold">Month {s.installmentNumber}</td>
-                            <td className="py-2 px-3">{formatDate(s.dueDate)}</td>
-                            <td className="py-2 px-3 font-bold text-slate-900">{formatINR(s.emiAmount)}</td>
-                            <td className="py-2 px-3">
-                              <span className={`px-2 py-0.5 rounded-md font-bold text-[10px] uppercase ${
-                                s.status === 'paid' ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'
-                              }`}>
-                                {s.status}
-                              </span>
-                            </td>
-                            <td className="py-2 px-3">
-                              {s.status !== 'paid' && (
-                                <button
-                                  onClick={() => setSelectedAccountForPayment(loan)}
-                                  className="text-xs font-bold text-emerald-600 hover:underline cursor-pointer"
-                                >
-                                  Pay Now
-                                </button>
-                              )}
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
+                  <h4 className="text-xs font-bold text-slate-700 uppercase tracking-wider mb-2">Installment Schedule</h4>
+                  {(() => {
+                    const page = schedulePage[loan.accountNumber] || 0;
+                    const totalPages = Math.max(1, Math.ceil(loan.schedule.length / SCHEDULE_PAGE_SIZE));
+                    const currentPage = Math.min(page, totalPages - 1);
+                    const pageRows = loan.schedule.slice(
+                      currentPage * SCHEDULE_PAGE_SIZE,
+                      currentPage * SCHEDULE_PAGE_SIZE + SCHEDULE_PAGE_SIZE
+                    );
+                    const setPage = (next: number) =>
+                      setSchedulePage((prev) => ({ ...prev, [loan.accountNumber]: Math.max(0, Math.min(totalPages - 1, next)) }));
+
+                    return (
+                      <>
+                        <div className="overflow-x-auto">
+                          <table className="w-full text-left text-xs">
+                            <thead className="bg-slate-100 text-slate-700 font-bold uppercase">
+                              <tr>
+                                <th className="py-2 px-3">Inst #</th>
+                                <th className="py-2 px-3">Due Date</th>
+                                <th className="py-2 px-3">EMI Amount</th>
+                                <th className="py-2 px-3">Status</th>
+                                <th className="py-2 px-3">Action</th>
+                              </tr>
+                            </thead>
+                            <tbody className="divide-y divide-slate-100">
+                              {pageRows.map((s) => {
+                                const pendingPayment = payments.find(
+                                  (p) =>
+                                    p.loanAccountId === loan.accountNumber &&
+                                    p.installmentNumber === s.installmentNumber &&
+                                    p.status === 'pending_verification'
+                                );
+                                return (
+                                  <tr key={s.installmentNumber}>
+                                    <td className="py-2 px-3 font-semibold">Month {s.installmentNumber}</td>
+                                    <td className="py-2 px-3">{formatDate(s.dueDate)}</td>
+                                    <td className="py-2 px-3 font-bold text-slate-900">{formatINR(s.emiAmount)}</td>
+                                    <td className="py-2 px-3">
+                                      {pendingPayment ? (
+                                        <span className="px-2 py-0.5 rounded-md font-bold text-[10px] uppercase bg-sky-100 text-sky-800">
+                                          Pending Verification
+                                        </span>
+                                      ) : (
+                                        <span className={`px-2 py-0.5 rounded-md font-bold text-[10px] uppercase ${
+                                          s.status === 'paid' ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'
+                                        }`}>
+                                          {s.status}
+                                        </span>
+                                      )}
+                                    </td>
+                                    <td className="py-2 px-3">
+                                      {s.status !== 'paid' && !pendingPayment && (
+                                        <button
+                                          onClick={() => setSelectedAccountForPayment(loan)}
+                                          className="text-xs font-bold text-emerald-600 hover:underline cursor-pointer"
+                                        >
+                                          Pay Now
+                                        </button>
+                                      )}
+                                    </td>
+                                  </tr>
+                                );
+                              })}
+                            </tbody>
+                          </table>
+                        </div>
+
+                        {totalPages > 1 && (
+                          <div className="flex items-center justify-between pt-3 text-xs">
+                            <span className="text-slate-500 font-semibold">
+                              Months {currentPage * SCHEDULE_PAGE_SIZE + 1}
+                              -{Math.min(loan.schedule.length, (currentPage + 1) * SCHEDULE_PAGE_SIZE)} of {loan.schedule.length}
+                            </span>
+                            <div className="flex items-center gap-2">
+                              <button
+                                type="button"
+                                onClick={() => setPage(currentPage - 1)}
+                                disabled={currentPage === 0}
+                                className="px-3 py-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-800 font-bold disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
+                              >
+                                Previous
+                              </button>
+                              <span className="text-slate-500 font-semibold">Page {currentPage + 1} of {totalPages}</span>
+                              <button
+                                type="button"
+                                onClick={() => setPage(currentPage + 1)}
+                                disabled={currentPage >= totalPages - 1}
+                                className="px-3 py-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-800 font-bold disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
+                              >
+                                Next
+                              </button>
+                            </div>
+                          </div>
+                        )}
+                      </>
+                    );
+                  })()}
                 </div>
 
                 <div className="pt-2 flex flex-wrap gap-2">

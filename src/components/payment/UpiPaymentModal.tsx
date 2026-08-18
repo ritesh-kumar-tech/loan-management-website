@@ -197,12 +197,12 @@ export const UpiPaymentModal: React.FC<UpiPaymentModalProps> = ({
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              {[
+              {([
                 ['Account Holder', settings.collectionAccountHolderName || settings.upiAccountName],
                 ['Account Number', settings.collectionAccountNumber],
                 ['IFSC Code', settings.collectionIfscCode],
                 ['Bank Name', settings.collectionBankName],
-              ].map(([label, value]) => (
+              ] as [string, string | undefined][]).map(([label, value]) => (
                 <div key={label} className="rounded-xl bg-white border border-blue-100 p-3 min-w-0">
                   <span className="block text-[10px] font-extrabold uppercase tracking-wider text-blue-700">{label}</span>
                   <div className="mt-1 flex items-center justify-between gap-2">

@@ -256,6 +256,7 @@ export interface Receipt {
   amountPaid: number;
   paymentMethod: string;
   utrNumber: string;
+  installmentNumber?: number;
   paymentDate: string;
   verificationDate: string;
   remainingBalance: number;

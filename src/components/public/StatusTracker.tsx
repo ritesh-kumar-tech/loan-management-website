@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { api } from '../../services/api';
 import { LoanApplication, LoanAccount, CompanySettings } from '../../types';
 import { formatINR, formatDate } from '../../utils/calculator';
@@ -12,26 +12,23 @@ interface StatusTrackerProps {
   onVerifiedCustomer?: (app: LoanApplication, loanAccount?: LoanAccount) => void;
 }
 
+const TRACK_IDENTIFIER_STORAGE_KEY = 'dhani_track_status_identifier';
+
 export const StatusTracker: React.FC<StatusTrackerProps> = ({ settings, onVerifiedCustomer }) => {
-  const [identifierInput, setIdentifierInput] = useState('');
+  const [identifierInput, setIdentifierInput] = useState(
+    () => localStorage.getItem(TRACK_IDENTIFIER_STORAGE_KEY) || ''
+  );
   const [loading, setLoading] = useState(false);
   const [application, setApplication] = useState<LoanApplication | null>(null);
   const [loanAccount, setLoanAccount] = useState<LoanAccount | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  const handleLookup = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!identifierInput.trim()) {
-      setError('Please enter your Application ID or registered mobile number.');
-      return;
-    }
+  const lookup = async (identifier: string) => {
     setLoading(true);
     setError(null);
 
     try {
-      const res = await api.trackApplication({
-        identifier: identifierInput.trim(),
-      });
+      const res = await api.trackApplication({ identifier });
 
       if (res.success && res.application) {
         setApplication(res.application);
@@ -49,10 +46,29 @@ export const StatusTracker: React.FC<StatusTrackerProps> = ({ settings, onVerifi
     }
   };
 
+  // Re-run the last lookup automatically on refresh so the status shown is
+  // current, instead of just leaving the field pre-filled and unsubmitted.
+  useEffect(() => {
+    const saved = localStorage.getItem(TRACK_IDENTIFIER_STORAGE_KEY);
+    if (saved) lookup(saved);
+  }, []);
+
+  const handleLookup = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!identifierInput.trim()) {
+      setError('Please enter your Application ID or registered mobile number.');
+      return;
+    }
+    localStorage.setItem(TRACK_IDENTIFIER_STORAGE_KEY, identifierInput.trim());
+    await lookup(identifierInput.trim());
+  };
+
   const handleReset = () => {
     setApplication(null);
     setLoanAccount(null);
     setError(null);
+    setIdentifierInput('');
+    localStorage.removeItem(TRACK_IDENTIFIER_STORAGE_KEY);
   };
 
   return (
