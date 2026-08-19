@@ -380,23 +380,29 @@ export async function buildSanctionLetterPdf(app: LoanApplication, settings: Com
 
   // ---------------- Header ----------------
   // Bespoke to this letter (not the shared drawHeader used by the other
-  // generated documents, which must not change): a bigger logo lockup with
-  // the address/contact block to its right, a solid colour band underneath.
+  // generated documents, which must not change): just the logo lockup and a
+  // document reference on the right, a solid colour band underneath. The
+  // registered address is intentionally not repeated here - it lives once,
+  // in the footer, so the letterhead stays uncluttered.
   const logoWidth = 34;
   const logoHeight = logoWidth * DHANI_LOGO_ASPECT_RATIO;
   doc.addImage(DHANI_LOGO_DATA_URI, 'JPEG', margin, 8, logoWidth, logoHeight);
   doc.setFont('helvetica', 'bold');
-  doc.setFontSize(9.5);
+  doc.setFontSize(11);
   doc.setTextColor(11, 25, 44);
   doc.text(settings.companyName.toUpperCase(), margin, 8 + logoHeight + 5);
+  if (settings.tagline) {
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(7.4);
+    doc.setTextColor(100, 116, 139);
+    doc.text(settings.tagline, margin, 8 + logoHeight + 9.5, { maxWidth: 90 });
+  }
 
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(9);
-  doc.setTextColor(15, 23, 42);
-  const headerAddressLines = doc.splitTextToSize(settings.registeredAddress || settings.branchAddress || '', 110);
-  doc.text(headerAddressLines, pageWidth - margin, 10, { align: 'right' });
   doc.setFont('helvetica', 'normal');
-  doc.text(settings.supportEmail, pageWidth - margin, 10 + headerAddressLines.length * 4.2, { align: 'right' });
+  doc.setFontSize(8);
+  doc.setTextColor(100, 116, 139);
+  doc.text(`Ref: SANC/${app.id}/2026`, pageWidth - margin, 10, { align: 'right' });
+  doc.text(`Date: ${sanctionDate}`, pageWidth - margin, 15, { align: 'right' });
 
   let y = 28;
   doc.setFillColor(37, 99, 235);
@@ -579,8 +585,8 @@ export async function buildSanctionLetterPdf(app: LoanApplication, settings: Com
 
   doc.setFontSize(7);
   doc.setTextColor(148, 163, 184);
-  doc.text(`Verify online: ${origin}/track-status`, margin, afterAddressY + 3.6);
-  doc.text(`Ref: SANC/${app.id}/2026 | Issued: ${sanctionDate}`, margin, afterAddressY + 7.4);
+  doc.text(`Phone: ${settings.supportPhone} | Email: ${settings.supportEmail}`, margin, afterAddressY + 3.6);
+  doc.text(`Verify online: ${origin}/track-status`, margin, afterAddressY + 7.4);
   doc.text(`${settings.nbfcLicenseInfo} | ${settings.registrationNumber}`, pageWidth - margin, afterAddressY + 7.4, { align: 'right' });
 
   return doc;

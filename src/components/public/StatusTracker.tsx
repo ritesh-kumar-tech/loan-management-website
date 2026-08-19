@@ -13,6 +13,12 @@ interface StatusTrackerProps {
 }
 
 const TRACK_IDENTIFIER_STORAGE_KEY = 'dhani_track_status_identifier';
+const TRACK_LAST_CHECK_STORAGE_KEY = 'dhani_track_status_last_checked_at';
+// Auto re-check is a convenience (keep the status fresh on refresh), not a
+// user-initiated search - it should never be the thing that burns through
+// the tracking rate limit. Skipping it when the last check was recent means
+// repeated refreshes stop spamming the endpoint on their own.
+const AUTO_RECHECK_MIN_INTERVAL_MS = 60 * 1000;
 
 export const StatusTracker: React.FC<StatusTrackerProps> = ({ settings, onVerifiedCustomer }) => {
   const [identifierInput, setIdentifierInput] = useState(
@@ -22,10 +28,12 @@ export const StatusTracker: React.FC<StatusTrackerProps> = ({ settings, onVerifi
   const [application, setApplication] = useState<LoanApplication | null>(null);
   const [loanAccount, setLoanAccount] = useState<LoanAccount | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const hasAutoCheckedRef = React.useRef(false);
 
   const lookup = async (identifier: string) => {
     setLoading(true);
     setError(null);
+    localStorage.setItem(TRACK_LAST_CHECK_STORAGE_KEY, String(Date.now()));
 
     try {
       const res = await api.trackApplication({ identifier });
@@ -48,9 +56,21 @@ export const StatusTracker: React.FC<StatusTrackerProps> = ({ settings, onVerifi
 
   // Re-run the last lookup automatically on refresh so the status shown is
   // current, instead of just leaving the field pre-filled and unsubmitted.
+  // Guarded so it only actually fires once per real mount (StrictMode's dev
+  // double-invoke would otherwise send two requests per refresh) and so it
+  // skips entirely if the last check was very recent - refreshing the page
+  // several times in a row shouldn't count as several separate lookups.
   useEffect(() => {
+    if (hasAutoCheckedRef.current) return;
+    hasAutoCheckedRef.current = true;
+
     const saved = localStorage.getItem(TRACK_IDENTIFIER_STORAGE_KEY);
-    if (saved) lookup(saved);
+    if (!saved) return;
+
+    const lastCheckedAt = Number(localStorage.getItem(TRACK_LAST_CHECK_STORAGE_KEY) || 0);
+    if (Date.now() - lastCheckedAt < AUTO_RECHECK_MIN_INTERVAL_MS) return;
+
+    lookup(saved);
   }, []);
 
   const handleLookup = async (e: React.FormEvent) => {
@@ -115,7 +135,16 @@ export const StatusTracker: React.FC<StatusTrackerProps> = ({ settings, onVerifi
         {error && (
           <div className="mt-6 p-4 rounded-xl bg-rose-50 border border-rose-200 text-rose-800 text-xs font-medium flex items-start gap-3">
             <AlertCircle className="w-5 h-5 text-rose-600 shrink-0 mt-0.5" />
-            <div>{error}</div>
+            <div className="flex-1">
+              <div>{error}</div>
+              <button
+                type="button"
+                onClick={handleReset}
+                className="mt-2 font-bold underline hover:text-rose-900 cursor-pointer"
+              >
+                Clear and try a different ID
+              </button>
+            </div>
           </div>
         )}
       </div>

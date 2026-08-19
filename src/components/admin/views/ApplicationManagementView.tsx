@@ -302,39 +302,6 @@ export const ApplicationManagementView: React.FC<ApplicationManagementViewProps>
               </button>
             </div>
 
-            {/* Document PDF Generation Quick Tools */}
-            <div className="bg-slate-50 p-4 rounded-2xl border border-slate-200/80 space-y-3 text-xs">
-              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1">
-                <span className="font-extrabold text-slate-900 flex items-center gap-1.5">
-                  <Printer className="w-4 h-4 text-emerald-600" /> Official Loan PDF Documents
-                </span>
-                <span className="text-[11px] text-slate-500">Prepared from current application data</span>
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-2">
-                <PdfAction
-                  title="General Loan Letter"
-                  description="Customer summary and general loan processing terms."
-                  onClick={() => generateGeneralLoanLetter(selectedApp, settings)}
-                />
-                <PdfAction
-                  title="Sanction Letter"
-                  description="Approved amount, EMI, conditions and validity."
-                  onClick={() => generateSanctionLetter(selectedApp, settings)}
-                />
-                <PdfAction
-                  title="Loan Agreement"
-                  description="Borrower undertaking and repayment terms."
-                  onClick={() => generateLoanAgreement(selectedApp, settings)}
-                />
-                <PdfAction
-                  title="EMI Schedule"
-                  description="Month-wise indicative repayment schedule."
-                  onClick={() => generateApplicationEmiSchedulePDF(selectedApp, settings)}
-                />
-              </div>
-            </div>
-
             {/* Applicant Profile Grid */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
               {/* Left Column: Personal & Employment */}
@@ -512,6 +479,39 @@ export const ApplicationManagementView: React.FC<ApplicationManagementViewProps>
                     </div>
                   </div>
                 ))}
+              </div>
+            </div>
+
+            {/* Document PDF Generation Quick Tools */}
+            <div className="bg-slate-50 p-4 rounded-2xl border border-slate-200/80 space-y-3 text-xs">
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1">
+                <span className="font-extrabold text-slate-900 flex items-center gap-1.5">
+                  <Printer className="w-4 h-4 text-emerald-600" /> Generate Official Loan Letters
+                </span>
+                <span className="text-[11px] text-slate-500">Creates a new PDF from application data — not the customer's uploaded Aadhaar/PAN file</span>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-2">
+                <PdfAction
+                  title="General Loan Letter"
+                  description="Customer summary and general loan processing terms."
+                  onClick={() => generateGeneralLoanLetter(selectedApp, settings)}
+                />
+                <PdfAction
+                  title="Sanction Letter"
+                  description="Approved amount, EMI, conditions and validity."
+                  onClick={() => generateSanctionLetter(selectedApp, settings)}
+                />
+                <PdfAction
+                  title="Loan Agreement"
+                  description="Borrower undertaking and repayment terms."
+                  onClick={() => generateLoanAgreement(selectedApp, settings)}
+                />
+                <PdfAction
+                  title="EMI Schedule"
+                  description="Month-wise indicative repayment schedule."
+                  onClick={() => generateApplicationEmiSchedulePDF(selectedApp, settings)}
+                />
               </div>
             </div>
 
