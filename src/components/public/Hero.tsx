@@ -1,5 +1,6 @@
 import React, { useMemo, useState } from 'react';
-import { ArrowRight, Calculator, CheckCircle2, Clock, FileText, Lock, ShieldCheck, Sparkles, UserCheck, WalletCards } from 'lucide-react';
+import { ArrowRight, CheckCircle2, FileText, UserCheck, WalletCards } from 'lucide-react';
+import heroBackgroundImage from '../../../assets/background-image.png';
 import { CmsContent, CompanySettings, EmploymentInfo, LoanProduct } from '../../types';
 import { formatINR } from '../../utils/calculator';
 
@@ -20,7 +21,7 @@ interface HeroProps {
   onNavigate?: (tab: string) => void;
 }
 
-export const Hero: React.FC<HeroProps> = ({ settings, products, cms, onApplyNow, onCalculateEmi, onNavigate }) => {
+export const Hero: React.FC<HeroProps> = ({ products, onApplyNow }) => {
   const activeProducts = useMemo(() => products.filter((product) => product.isActive), [products]);
   const firstProduct = activeProducts[0];
   const [productId, setProductId] = useState(firstProduct?.id || 'prod_personal');
@@ -31,10 +32,6 @@ export const Hero: React.FC<HeroProps> = ({ settings, products, cms, onApplyNow,
   const [employmentType, setEmploymentType] = useState('salaried');
   const [monthlyIncome, setMonthlyIncome] = useState<number | ''>('');
   const [existingEmi, setExistingEmi] = useState<number | ''>('');
-  const heroBackgroundImage = cms?.promotionalSlides?.find((slide) => slide.isActive && slide.productId === productId)?.imageUrl
-    || cms?.promotionalSlides?.find((slide) => slide.isActive)?.imageUrl
-    || 'https://images.unsplash.com/photo-1551836022-d5d88e9218df?w=1200&h=1200&fit=crop&auto=format';
-
   const handleProductChange = (nextId: string) => {
     const product = activeProducts.find((item) => item.id === nextId);
     setProductId(nextId);
@@ -65,67 +62,12 @@ export const Hero: React.FC<HeroProps> = ({ settings, products, cms, onApplyNow,
 
       <div className="relative df-container py-16 sm:py-20 lg:py-28">
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 xl:gap-12 items-center min-h-[640px]">
-          <div
-            className="relative overflow-hidden lg:col-span-6 rounded-[28px] border border-white/15 px-5 py-7 sm:px-8 lg:px-9 lg:py-10 shadow-2xl shadow-blue-950/25 min-h-[620px] animate-[fadeUp_.6s_ease-out_both]"
-            style={{
-              // Previously stacked three dark layers on top of this photo (a
-              // 98%-opacity gradient here, a second 90%-opacity gradient div,
-              // plus a dot-pattern overlay) - combined they left the image
-              // almost fully hidden behind navy. Lightened so it's actually
-              // visible, especially on the right where the text isn't.
-              backgroundImage: `linear-gradient(90deg, rgba(7, 27, 61, 0.88) 0%, rgba(7, 27, 61, 0.55) 50%, rgba(7, 48, 111, 0.22) 100%), url("${heroBackgroundImage}")`,
-              backgroundSize: 'cover',
-              backgroundPosition: 'center right',
-            }}
-          >
-            <div className="absolute inset-0 bg-gradient-to-t from-[#071B3D]/45 via-transparent to-[#071B3D]/10" />
-            <div className="absolute inset-0 opacity-[0.12] bg-[radial-gradient(#ffffff_1px,transparent_1px)] [background-size:18px_18px]" />
-            <div className="relative z-10 h-full flex flex-col justify-center space-y-6 text-center lg:text-left">
-            <div className="inline-flex w-fit mx-auto lg:mx-0 items-center gap-2 px-4 py-2 rounded-full bg-white/12 border border-white/25 text-blue-50 text-xs font-bold uppercase tracking-wider backdrop-blur">
-              <ShieldCheck className="w-4 h-4 text-sky-200" />
-              {settings.nbfcLicenseInfo}
-            </div>
-
-            <h1 className="text-[2.35rem] sm:text-5xl lg:text-[3.55rem] font-black tracking-tight leading-[1.06] max-w-2xl mx-auto lg:mx-0 drop-shadow-sm">
-              Start Your Loan Application Online
-            </h1>
-
-            <p className="text-base sm:text-lg text-blue-50 max-w-xl mx-auto lg:mx-0 leading-relaxed">
-              Choose a loan option, enter your requirement, and continue into personal details, banking details, approval, disbursement, and EMI tracking.
-            </p>
-
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 max-w-2xl mx-auto lg:mx-0 text-left">
-              <div className="bg-[#071B3D]/62 p-4 rounded-2xl border border-white/18 backdrop-blur-md shadow-lg shadow-blue-950/10">
-                <Sparkles className="w-5 h-5 text-sky-200 mb-3" />
-                <span className="text-xs text-blue-100 font-semibold block uppercase">Interest from</span>
-                <span className="text-[1.65rem] leading-tight font-black text-white">{cms?.heroStartingRate || 6}% p.a.</span>
-              </div>
-              <div className="bg-[#071B3D]/62 p-4 rounded-2xl border border-white/18 backdrop-blur-md shadow-lg shadow-blue-950/10">
-                <FileText className="w-5 h-5 text-sky-200 mb-3" />
-                <span className="text-xs text-blue-100 font-semibold block uppercase">Loan range</span>
-                <span className="text-[1.65rem] leading-tight font-black text-white">{cms?.heroAmountRange || '₹25K - ₹2Cr'}</span>
-              </div>
-              <div className="bg-[#071B3D]/62 p-4 rounded-2xl border border-white/18 backdrop-blur-md shadow-lg shadow-blue-950/10">
-                <Clock className="w-5 h-5 text-sky-200 mb-3" />
-                <span className="text-xs text-blue-100 font-semibold block uppercase">Flexible tenure</span>
-                <span className="text-[1.65rem] leading-tight font-black text-white">{cms?.heroTenure || '12 - 300 months'}</span>
-              </div>
-            </div>
-
-            <div className="flex flex-col sm:flex-row items-center justify-center lg:justify-start gap-3">
-              <button onClick={onCalculateEmi} className="df-btn bg-blue-950/40 hover:bg-blue-950/60 text-white border border-white/20 min-w-[170px]">
-                <Calculator className="w-4 h-4 text-sky-200" /> EMI Calculator
-              </button>
-              <button onClick={() => onNavigate?.('track')} className="min-h-12 px-2 text-sm font-bold text-blue-100 hover:text-white inline-flex items-center gap-2">
-                Check Status <ArrowRight className="w-4 h-4" />
-              </button>
-            </div>
-
-            <p className="text-xs text-blue-100/90 flex items-start justify-center lg:justify-start gap-2">
-              <Lock className="w-3.5 h-3.5 text-sky-200 shrink-0 mt-0.5" />
-              <span>{cms?.interestRateDisclaimer || 'Interest rates start from 6% per annum. Final rates depend on eligibility, verification, and lending policies.'}</span>
-            </p>
-            </div>
+          <div className="relative overflow-hidden lg:col-span-6 rounded-[28px] border border-white/15 shadow-2xl shadow-blue-950/25 animate-[fadeUp_.6s_ease-out_both]">
+            <img
+              src={heroBackgroundImage}
+              alt="Dhani instant personal loans"
+              className="block w-full h-full min-h-[620px] object-cover object-center"
+            />
           </div>
 
           <div className="lg:col-span-6 flex items-center">
@@ -207,4 +149,3 @@ export const Hero: React.FC<HeroProps> = ({ settings, products, cms, onApplyNow,
     </section>
   );
 };
-
