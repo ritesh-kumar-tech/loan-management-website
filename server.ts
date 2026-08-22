@@ -7,7 +7,7 @@ import multer from 'multer';
 import { createServer as createViteServer } from 'vite';
 import { calculateEmi, calculateFOIR } from './src/utils/calculator';
 import { APPLICATION_STATUSES } from './src/utils/statusConfig';
-import { ApplicationStatus, AppNotification, EligibilityResult, LoanApplication, Receipt, SupportTicket } from './src/types';
+import { ApplicationStatus, AppNotification, EligibilityResult, InsurancePolicy, LoanApplication, Receipt, SupportTicket } from './src/types';
 import {
   applicationIdExists,
   findUserAuthByEmail,
@@ -22,6 +22,7 @@ import {
   saveLoanProduct,
   saveNotification,
   savePaymentSubmission,
+  saveInsurancePolicy,
   saveReceipt,
   saveSettings,
   saveStaffMember,
@@ -133,6 +134,7 @@ export async function createApp({ serveClient = true }: CreateAppOptions = {}) {
   let loanAccounts = collections.loanAccounts;
   let paymentSubmissions = collections.paymentSubmissions;
   let receipts = collections.receipts;
+  let insurancePolicies = collections.insurancePolicies;
   let supportTickets = collections.supportTickets;
   let notifications = collections.notifications;
   let auditLogs = collections.auditLogs;
@@ -998,9 +1000,79 @@ export async function createApp({ serveClient = true }: CreateAppOptions = {}) {
     res.json({ success: true, loanAccounts });
   });
 
+  // Insurance: Admin issues a policy against an application
+  app.post('/api/insurance/issue', requireRole('admin'), ah(async (req, res) => {
+    const { applicationId, policyNumber, eInsuranceAccountNo, clientId, planDescription, securityAmount, insuranceCharges } = req.body;
+
+    const appItem = applications.find((a) => a.id === applicationId);
+    if (!appItem) {
+      res.status(404).json({ success: false, error: 'Application not found.' });
+      return;
+    }
+    if (!policyNumber || !String(policyNumber).trim()) {
+      res.status(400).json({ success: false, error: 'A policy number is required.' });
+      return;
+    }
+    const security = Number(securityAmount) || 0;
+    const charges = Number(insuranceCharges) || 0;
+    if (security + charges <= 0) {
+      res.status(400).json({ success: false, error: 'A valid premium amount is required.' });
+      return;
+    }
+
+    const newPolicy: InsurancePolicy = {
+      id: `INS-2026-${Math.floor(100000 + Math.random() * 900000)}`,
+      applicationId: appItem.id,
+      userId: appItem.userId,
+      customerName: appItem.personalInfo?.fullName || 'Customer',
+      policyNumber: String(policyNumber).trim(),
+      eInsuranceAccountNo: eInsuranceAccountNo || '',
+      clientId: clientId || '',
+      planDescription: planDescription || '',
+      securityAmount: security,
+      insuranceCharges: charges,
+      totalAmount: security + charges,
+      status: 'issued',
+      issuedAt: new Date().toISOString(),
+      issuedBy: 'Admin',
+    };
+
+    insurancePolicies.unshift(newPolicy);
+    await saveInsurancePolicy(newPolicy);
+
+    addAuditLog('usr_admin_1', 'admin', 'admin@dhanifinance.in', 'INSURANCE_ISSUED', 'InsurancePolicy', newPolicy.id, `Issued policy ${newPolicy.policyNumber} for ₹${newPolicy.totalAmount}`);
+    addNotification({
+      userId: newPolicy.userId,
+      title: 'Insurance policy issued',
+      message: `An insurance policy (${newPolicy.policyNumber}) worth ₹${newPolicy.totalAmount.toLocaleString('en-IN')} has been issued against your application. Pay the premium to activate it.`,
+      type: 'info',
+      link: `/dashboard/applications/${appItem.id}`,
+    });
+
+    res.json({ success: true, policy: newPolicy });
+  }));
+
+  app.get('/api/insurance', (req, res) => {
+    const { userId, applicationId } = req.query;
+    if (userId || applicationId) {
+      const filtered = insurancePolicies.filter((p) =>
+        (userId ? p.userId === userId : true) &&
+        (applicationId ? p.applicationId === applicationId : true)
+      );
+      res.json({ success: true, policies: filtered });
+      return;
+    }
+    const session = getSessionFromRequest(req);
+    if (!session || session.role !== 'admin') {
+      res.status(401).json({ success: false, error: 'Authentication required to list all insurance policies.' });
+      return;
+    }
+    res.json({ success: true, policies: insurancePolicies });
+  });
+
   // Payments: Submit Proof
   app.post('/api/payments/submit', ah(async (req, res) => {
-    const { loanAccountId, applicationId, userId, customerName, amount, purpose, utrNumber, proofScreenshotUrl, installmentNumber } = req.body;
+    const { loanAccountId, applicationId, userId, customerName, amount, purpose, utrNumber, proofScreenshotUrl, installmentNumber, insurancePolicyId } = req.body;
 
     if (!utrNumber || !String(utrNumber).trim()) {
       res.status(400).json({ success: false, error: 'A valid UTR / transaction reference number is required.' });
@@ -1033,6 +1105,7 @@ export async function createApp({ serveClient = true }: CreateAppOptions = {}) {
       amount: Number(amount),
       purpose: paymentPurpose,
       installmentNumber: installmentNumber ? Number(installmentNumber) : 1,
+      insurancePolicyId: insurancePolicyId || undefined,
       upiIdUsed: settings.upiId,
       utrNumber,
       // Screenshot proof is optional - fabricating a stand-in image here would make
@@ -1077,6 +1150,15 @@ export async function createApp({ serveClient = true }: CreateAppOptions = {}) {
         });
         appItem.updatedAt = new Date().toISOString();
         await saveApplication(appItem);
+      }
+    }
+
+    // If insurance premium submission, mark the policy as awaiting verification
+    if (paymentPurpose === 'insurance' && insurancePolicyId) {
+      const policy = insurancePolicies.find((p) => p.id === insurancePolicyId);
+      if (policy) {
+        policy.status = 'payment_submitted';
+        await saveInsurancePolicy(policy);
       }
     }
 
@@ -1202,6 +1284,25 @@ export async function createApp({ serveClient = true }: CreateAppOptions = {}) {
       receipts.unshift(newReceipt);
       await saveReceipt(newReceipt);
 
+      // If insurance premium payment, activate the policy - this is what
+      // flips on the "Download Certificate PDF" button for the customer.
+      if (pay.purpose === 'insurance' && pay.insurancePolicyId) {
+        const policy = insurancePolicies.find((p) => p.id === pay.insurancePolicyId);
+        if (policy) {
+          policy.status = 'active';
+          policy.paymentId = pay.id;
+          policy.activatedAt = new Date().toISOString();
+          await saveInsurancePolicy(policy);
+          addNotification({
+            userId: pay.userId || 'usr_guest',
+            title: 'Insurance certificate ready',
+            message: `Your insurance policy ${policy.policyNumber} is now active. The certificate is available to download.`,
+            type: 'success',
+            link: `/dashboard/applications/${policy.applicationId}`,
+          });
+        }
+      }
+
       addAuditLog('usr_admin_1', 'admin', 'admin@dhanifinance.in', 'PAYMENT_VERIFIED', 'PaymentSubmission', pay.id, `Approved payment UTR ${pay.utrNumber}`);
       addNotification({
         userId: pay.userId || 'usr_guest',
@@ -1213,6 +1314,16 @@ export async function createApp({ serveClient = true }: CreateAppOptions = {}) {
     } else {
       pay.status = 'rejected';
       pay.verificationNote = note || 'Invalid UTR or payment not reflected in bank account.';
+
+      // Revert the policy so the customer can retry payment.
+      if (pay.purpose === 'insurance' && pay.insurancePolicyId) {
+        const policy = insurancePolicies.find((p) => p.id === pay.insurancePolicyId);
+        if (policy && policy.status === 'payment_submitted') {
+          policy.status = 'issued';
+          await saveInsurancePolicy(policy);
+        }
+      }
+
       addAuditLog('usr_admin_1', 'admin', 'admin@dhanifinance.in', 'PAYMENT_REJECTED', 'PaymentSubmission', pay.id, `Rejected payment UTR ${pay.utrNumber}`);
       addNotification({
         userId: pay.userId || 'usr_guest',

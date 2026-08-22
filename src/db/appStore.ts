@@ -12,6 +12,7 @@ import {
   saveLoanAccount as saveSqliteLoanAccount,
   saveLoanProduct as saveSqliteLoanProduct,
   savePaymentSubmission as saveSqlitePaymentSubmission,
+  saveInsurancePolicy as saveSqliteInsurancePolicy,
   saveNotification as saveSqliteNotification,
   saveReceipt as saveSqliteReceipt,
   saveSettings as saveSqliteSettings,
@@ -32,6 +33,7 @@ import {
   saveMysqlLoanAccount,
   saveMysqlLoanProduct,
   saveMysqlPaymentSubmission,
+  saveMysqlInsurancePolicy,
   saveMysqlNotification,
   saveMysqlReceipt,
   saveMysqlSettings,
@@ -80,6 +82,7 @@ export const saveLoanAccount = (value: any) => (isMysql() ? saveMysqlLoanAccount
 export const savePaymentSubmission = (value: any) => (isMysql() ? saveMysqlPaymentSubmission(value) : saveSqlitePaymentSubmission(value));
 export const saveNotification = (value: any) => (isMysql() ? saveMysqlNotification(value) : saveSqliteNotification(value));
 export const saveReceipt = (value: any) => (isMysql() ? saveMysqlReceipt(value) : saveSqliteReceipt(value));
+export const saveInsurancePolicy = (value: any) => (isMysql() ? saveMysqlInsurancePolicy(value) : saveSqliteInsurancePolicy(value));
 export const saveSupportTicket = (value: any) => (isMysql() ? saveMysqlSupportTicket(value) : saveSqliteSupportTicket(value));
 export const saveAuditLog = (value: any) => (isMysql() ? saveMysqlAuditLog(value) : saveSqliteAuditLog(value));
 export const saveCustomer = (value: any) => (isMysql() ? saveMysqlCustomer(value) : saveSqliteCustomer(value));

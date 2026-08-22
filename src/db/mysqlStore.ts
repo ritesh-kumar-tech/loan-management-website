@@ -2,7 +2,7 @@ import 'dotenv/config';
 import fs from 'node:fs';
 import path from 'node:path';
 import mysql from 'mysql2/promise';
-import { AppNotification, AuditLog, CompanySettings, LoanAccount, LoanApplication, LoanProduct, PaymentSubmission, Receipt, SupportTicket, User } from '../types';
+import { AppNotification, AuditLog, CompanySettings, InsurancePolicy, LoanAccount, LoanApplication, LoanProduct, PaymentSubmission, Receipt, SupportTicket, User } from '../types';
 import { hashPassword } from './security';
 
 type AnyRecord = Record<string, any>;
@@ -71,6 +71,7 @@ export const getMysqlCollections = async (fallbacks: { settings: CompanySettings
   loanAccounts: await tableData<LoanAccount>('loan_accounts'),
   paymentSubmissions: await tableData<PaymentSubmission>('payment_submissions'),
   receipts: await tableData<Receipt>('receipts'),
+  insurancePolicies: await tableData<InsurancePolicy>('insurance_policies'),
   supportTickets: await tableData<SupportTicket>('support_tickets'),
   notifications: await tableData<AppNotification>('notifications'),
   auditLogs: await tableData<AuditLog>('audit_logs'),
@@ -244,6 +245,16 @@ export const saveMysqlReceipt = async (receipt: Receipt) => {
      VALUES (?, ?, ?, ?, ?, ?, ?, CAST(? AS JSON), ?)
      ON DUPLICATE KEY UPDATE data_json = VALUES(data_json), verification_date = VALUES(verification_date)`,
     [receipt.receiptNumber, receipt.paymentId, receipt.loanAccountId || null, receipt.applicationId || null, receipt.customerName, receipt.amountPaid, receipt.utrNumber, json(receipt), toDate(receipt.verificationDate)]
+  );
+};
+
+export const saveMysqlInsurancePolicy = async (policy: InsurancePolicy) => {
+  await pool.query(
+    `INSERT INTO insurance_policies (id, application_id, user_id, customer_name, policy_number, status, data_json, created_at)
+     VALUES (?, ?, ?, ?, ?, ?, CAST(? AS JSON), ?)
+     ON DUPLICATE KEY UPDATE application_id = VALUES(application_id), user_id = VALUES(user_id),
+       customer_name = VALUES(customer_name), policy_number = VALUES(policy_number), status = VALUES(status), data_json = VALUES(data_json)`,
+    [policy.id, policy.applicationId, policy.userId, policy.customerName, policy.policyNumber, policy.status, json(policy), toDate(policy.issuedAt)]
   );
 };
 

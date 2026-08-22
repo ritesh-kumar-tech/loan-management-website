@@ -3,6 +3,7 @@ import { api } from '../../services/api';
 import {
   AuditLog,
   CompanySettings,
+  InsurancePolicy,
   LoanAccount,
   LoanApplication,
   LoanProduct,
@@ -73,6 +74,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ settings, onUpda
   const [loanAccounts, setLoanAccounts] = useState<LoanAccount[]>([]);
   const [payments, setPayments] = useState<PaymentSubmission[]>([]);
   const [receipts, setReceipts] = useState<Receipt[]>([]);
+  const [insurancePolicies, setInsurancePolicies] = useState<InsurancePolicy[]>([]);
   const [products, setProducts] = useState<LoanProduct[]>([]);
   const [customers, setCustomers] = useState<any[]>([]);
   const [staff, setStaff] = useState<any[]>([]);
@@ -83,11 +85,12 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ settings, onUpda
   const loadData = async (silent = false) => {
     if (!silent) setLoading(true);
     try {
-      const [appsData, loansData, paymentsData, receiptsData, productsData, customersData, staffData, ticketsData, logsData] = await Promise.all([
+      const [appsData, loansData, paymentsData, receiptsData, policiesData, productsData, customersData, staffData, ticketsData, logsData] = await Promise.all([
         api.getApplications(),
         api.getLoanAccounts(),
         api.getPayments(),
         api.getReceipts(),
+        api.getInsurancePolicies(),
         api.getLoanProducts(),
         api.getCustomers(),
         api.getStaff(),
@@ -99,6 +102,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ settings, onUpda
       setLoanAccounts(loansData);
       setPayments(paymentsData);
       setReceipts(receiptsData);
+      setInsurancePolicies(policiesData);
       setProducts(productsData);
       setCustomers(customersData);
       setStaff(staffData);
@@ -127,6 +131,19 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ settings, onUpda
 
   const handleVerifyPayment = async (paymentId: string, action: 'approve' | 'reject', note?: string) => {
     await api.verifyPayment(paymentId, action, note);
+    await loadData(true);
+  };
+
+  const handleIssueInsurance = async (payload: {
+    applicationId: string;
+    policyNumber: string;
+    eInsuranceAccountNo?: string;
+    clientId?: string;
+    planDescription?: string;
+    securityAmount: number;
+    insuranceCharges: number;
+  }) => {
+    await api.issueInsurancePolicy(payload);
     await loadData(true);
   };
 
@@ -268,7 +285,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ settings, onUpda
       );
     }
     if (activeSection === 'customers') return <CustomerManagementView customers={customers} applications={applications} loanAccounts={loanAccounts} onSaveCustomer={handleSaveCustomer} />;
-    if (activeSection === 'applications') return <ApplicationManagementView applications={applications} settings={settings} onUpdateStatus={handleUpdateApplicationStatus} onVerifyDocument={handleVerifyDocument} />;
+    if (activeSection === 'applications') return <ApplicationManagementView applications={applications} settings={settings} insurancePolicies={insurancePolicies} onUpdateStatus={handleUpdateApplicationStatus} onVerifyDocument={handleVerifyDocument} onIssueInsurance={handleIssueInsurance} />;
     if (activeSection === 'loans') return <LoanManagementView loanAccounts={loanAccounts} settings={settings} onAdjustLoan={handleAdjustLoan} />;
     if (activeSection === 'documents') return <DocumentVerificationView applications={applications} onVerifyDocument={handleVerifyDocument} />;
     if (activeSection === 'payments') return <PaymentVerificationView payments={payments} onVerifyPayment={handleVerifyPayment} />;

@@ -1,4 +1,4 @@
-import { CompanySettings, LoanProduct, LoanApplication, LoanAccount, PaymentSubmission, Receipt, SupportTicket, AppNotification, AuditLog, User, EligibilityResult } from '../types';
+import { CompanySettings, LoanProduct, LoanApplication, LoanAccount, PaymentSubmission, InsurancePolicy, Receipt, SupportTicket, AppNotification, AuditLog, User, EligibilityResult } from '../types';
 
 const SESSION_TOKEN_KEY = 'dhaniSessionToken';
 
@@ -257,6 +257,7 @@ export const api = {
     utrNumber: string;
     proofScreenshotUrl?: string;
     installmentNumber?: number;
+    insurancePolicyId?: string;
   }): Promise<{ success: boolean; payment?: PaymentSubmission; error?: string }> {
     const res = await apiFetch('/api/payments/submit', {
       method: 'POST',
@@ -286,6 +287,34 @@ export const api = {
     });
     const data = await res.json();
     return data.payment;
+  },
+
+  async getInsurancePolicies(filters?: { userId?: string; applicationId?: string }): Promise<InsurancePolicy[]> {
+    try {
+      const query = filters ? new URLSearchParams(Object.entries(filters).filter(([, v]) => Boolean(v)) as [string, string][]).toString() : '';
+      const res = await apiFetch(query ? `/api/insurance?${query}` : '/api/insurance');
+      const data = await res.json();
+      return data.policies || [];
+    } catch {
+      return [];
+    }
+  },
+
+  async issueInsurancePolicy(payload: {
+    applicationId: string;
+    policyNumber: string;
+    eInsuranceAccountNo?: string;
+    clientId?: string;
+    planDescription?: string;
+    securityAmount: number;
+    insuranceCharges: number;
+  }): Promise<{ success: boolean; policy?: InsurancePolicy; error?: string }> {
+    const res = await apiFetch('/api/insurance/issue', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    return await res.json();
   },
 
   async verifyReceiptPublic(receiptNumber: string): Promise<{ success: boolean; receipt?: Receipt; error?: string }> {

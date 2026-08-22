@@ -11,8 +11,9 @@ interface UpiPaymentModalProps {
   userId: string;
   customerName: string;
   amountPayable: number;
-  purpose?: 'emi' | 'processing_fee';
+  purpose?: 'emi' | 'processing_fee' | 'insurance';
   installmentNumber?: number;
+  insurancePolicyId?: string;
   onClose: () => void;
   onPaymentSubmitted: (payment: PaymentSubmission) => void;
 }
@@ -26,6 +27,7 @@ export const UpiPaymentModal: React.FC<UpiPaymentModalProps> = ({
   amountPayable,
   purpose = 'emi',
   installmentNumber,
+  insurancePolicyId,
   onClose,
   onPaymentSubmitted,
 }) => {
@@ -95,6 +97,7 @@ export const UpiPaymentModal: React.FC<UpiPaymentModalProps> = ({
         utrNumber: utrNumber.trim().toUpperCase(),
         proofScreenshotUrl: proofUrl || undefined,
         installmentNumber,
+        insurancePolicyId,
       });
 
       if (res.success && res.payment) {

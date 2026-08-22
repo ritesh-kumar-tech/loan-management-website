@@ -1,5 +1,5 @@
 import { jsPDF } from 'jspdf';
-import { LoanApplication, LoanAccount, PaymentSubmission, Receipt, CompanySettings } from '../types';
+import { LoanApplication, LoanAccount, PaymentSubmission, InsurancePolicy, Receipt, CompanySettings } from '../types';
 import { calculateEmi, formatINR, formatDate } from './calculator';
 import { DHANI_LOGO_ASPECT_RATIO, DHANI_LOGO_DATA_URI } from './dhaniLogo';
 
@@ -1067,4 +1067,94 @@ export function generatePaymentReceiptPDF(receipt: Receipt, settings: CompanySet
   drawFooter(doc, settings, receipt.receiptNumber);
 
   doc.save(`DhaniFinance_Receipt_${receipt.receiptNumber}.pdf`);
+}
+
+export async function generateInsuranceCertificatePDF(policy: InsurancePolicy, app: LoanApplication, settings: CompanySettings) {
+  const doc = new jsPDF();
+  drawHeader(doc, settings, 'Insurance Certificate');
+
+  const origin = typeof window !== 'undefined' ? window.location.origin : '';
+
+  let y = 45;
+  const qrSize = 24;
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(13);
+  doc.setTextColor(15, 23, 42);
+  doc.text('INSURANCE POLICY CERTIFICATE', 14, y);
+
+  // QR sits top-right, alongside the title, so the tall stack of key-value
+  // sections below never has to fight it for vertical space.
+  const verificationUrl = `${origin}/track-status?applicationId=${encodeURIComponent(app.id)}`;
+  await addQrImageOrFallback(doc, verificationUrl, 196 - qrSize, y - 5, qrSize);
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(6.6);
+  doc.setTextColor(100, 116, 139);
+  doc.text('Scan to Verify', 196 - qrSize / 2, y - 5 + qrSize + 3, { align: 'center' });
+
+  y += 8;
+  doc.setFontSize(9);
+  doc.setFont('helvetica', 'normal');
+  doc.setTextColor(51, 65, 85);
+  const introLines = doc.splitTextToSize(
+    `We would like to inform you that ${policy.customerName} has been insured with us against loan REF. ${app.id}. ${policy.planDescription || ''}`.trim(),
+    150
+  );
+  doc.text(introLines, 14, y);
+  y += introLines.length * 4.6 + 6;
+
+  const insuranceRows: [string, string][] = [
+    ['Policy Number', policy.policyNumber],
+    ['e-Insurance Account No', policy.eInsuranceAccountNo || '-'],
+    ['Policy Owner', policy.customerName],
+    ['Client ID', policy.clientId || '-'],
+    ['Mobile No', app.personalInfo.mobile || '-'],
+  ];
+  drawKeyValueRows(doc, insuranceRows, 14, y, 182);
+  y += insuranceRows.length * 8 + 5;
+
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(9.5);
+  doc.setTextColor(15, 23, 42);
+  doc.text('Bank Account Details', 14, y);
+  y += 4;
+  const bankRows: [string, string][] = [
+    ['PAN', app.personalInfo.panNumber || '-'],
+    ['Aadhaar No', `XXXX-XXXX-${app.personalInfo.aadhaarLast4 || 'XXXX'}`],
+    ['Bank Name', app.financialInfo.bankName || '-'],
+    ['Bank A/C Holder', app.financialInfo.accountHolderName || app.personalInfo.fullName],
+    ['Branch / IFSC', app.financialInfo.ifscCode || '-'],
+    ['Bank A/C', maskAccount(app.financialInfo.accountNumber)],
+  ];
+  drawKeyValueRows(doc, bankRows, 14, y, 182);
+  y += bankRows.length * 8 + 5;
+
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(9.5);
+  doc.setTextColor(15, 23, 42);
+  doc.text('Payment Details (Purpose of Payment)', 14, y);
+  y += 4;
+  const paymentRows: [string, string][] = [
+    ['Applicant Name', policy.customerName],
+    ['Payment Mode', 'Online (UPI)'],
+    ['Security Amount', formatPDF_INR(policy.securityAmount)],
+    ['Insurance Charges', formatPDF_INR(policy.insuranceCharges)],
+    ['Total', formatPDF_INR(policy.totalAmount)],
+  ];
+  drawKeyValueRows(doc, paymentRows, 14, y, 182);
+  y += paymentRows.length * 8 + 6;
+
+  doc.setFont('helvetica', 'italic');
+  doc.setFontSize(7.2);
+  doc.setTextColor(148, 163, 184);
+  const disclaimerLines = doc.splitTextToSize(
+    'Disclaimer: The risk and eligibility criteria given here are based on internal assessment. Users are advised to re-check the same with the individual policy documentation.',
+    182
+  );
+  doc.text(disclaimerLines, 14, y);
+  y += disclaimerLines.length * 3.6 + 4;
+
+  drawSignatures(doc, settings, y);
+  drawFooter(doc, settings, policy.policyNumber);
+
+  doc.save(`DhaniFinance_InsuranceCertificate_${policy.policyNumber}.pdf`);
 }

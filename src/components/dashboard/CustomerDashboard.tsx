@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { api } from '../../services/api';
-import { LoanApplication, LoanAccount, PaymentSubmission, SupportTicket, CompanySettings, User } from '../../types';
+import { LoanApplication, LoanAccount, PaymentSubmission, InsurancePolicy, SupportTicket, CompanySettings, User } from '../../types';
 import { formatINR, formatDate } from '../../utils/calculator';
-import { generateApplicationAcknowledgement, generateSanctionLetter, generateLoanAgreement, generateRepaymentSchedulePDF, generatePaymentReceiptPDF } from '../../utils/pdfGenerator';
+import { generateApplicationAcknowledgement, generateSanctionLetter, generateLoanAgreement, generateRepaymentSchedulePDF, generatePaymentReceiptPDF, generateInsuranceCertificatePDF } from '../../utils/pdfGenerator';
 import { UpiPaymentModal } from '../payment/UpiPaymentModal';
 import { StatusBadge } from '../shared/StatusBadge';
 import { 
@@ -41,12 +41,14 @@ export const CustomerDashboard: React.FC<CustomerDashboardProps> = ({
   const [applications, setApplications] = useState<LoanApplication[]>(verifiedApplication ? [verifiedApplication] : []);
   const [loanAccounts, setLoanAccounts] = useState<LoanAccount[]>(verifiedLoanAccount ? [verifiedLoanAccount] : []);
   const [payments, setPayments] = useState<PaymentSubmission[]>([]);
+  const [insurancePolicies, setInsurancePolicies] = useState<InsurancePolicy[]>([]);
   const [tickets, setTickets] = useState<SupportTicket[]>([]);
   const [loading, setLoading] = useState(true);
 
   // Modal payment
   const [selectedAccountForPayment, setSelectedAccountForPayment] = useState<LoanAccount | null>(null);
   const [selectedProcessingFeeApp, setSelectedProcessingFeeApp] = useState<LoanApplication | null>(null);
+  const [selectedInsurancePolicy, setSelectedInsurancePolicy] = useState<InsurancePolicy | null>(null);
 
   // Repayment schedule pagination (per loan account)
   const SCHEDULE_PAGE_SIZE = 12;
@@ -62,30 +64,34 @@ export const CustomerDashboard: React.FC<CustomerDashboardProps> = ({
     setLoading(true);
     try {
       if (user) {
-        const [apps, loans, pays, tkts] = await Promise.all([
+        const [apps, loans, pays, policies, tkts] = await Promise.all([
           api.getApplications(user.id),
           api.getLoanAccounts(user.id),
           api.getPayments({ userId: user.id }),
+          api.getInsurancePolicies({ userId: user.id }),
           api.getSupportTickets(user.id),
         ]);
         setApplications(apps);
         setLoanAccounts(loans);
         setPayments(pays);
+        setInsurancePolicies(policies);
         setTickets(tkts);
       } else if (verifiedApplication) {
         // Not logged in: the customer only proved ownership of one application via
         // /api/applications/track (App ID or mobile match), so re-use that same
         // scoped, masked lookup to refresh instead of fetching every application
         // and loan account in the system and filtering client-side.
-        const [trackResult, pays] = await Promise.all([
+        const [trackResult, pays, policies] = await Promise.all([
           api.trackApplication({ identifier: verifiedApplication.id }),
           api.getPayments({ applicationId: verifiedApplication.id }),
+          api.getInsurancePolicies({ applicationId: verifiedApplication.id }),
         ]);
         const refreshedApp = trackResult.application || verifiedApplication;
         const refreshedLoan = trackResult.loanAccount || verifiedLoanAccount || null;
         setApplications([refreshedApp]);
         setLoanAccounts(refreshedLoan ? [refreshedLoan] : []);
         setPayments(pays);
+        setInsurancePolicies(policies);
       }
     } catch (e) {
       console.error(e);
@@ -442,6 +448,67 @@ export const CustomerDashboard: React.FC<CustomerDashboardProps> = ({
                       </div>
                     </div>
                   </div>
+
+                  {/* Insurance */}
+                  {(() => {
+                    const policy = insurancePolicies.find((p) => p.applicationId === app.id);
+                    if (!policy) return null;
+                    return (
+                      <div className="rounded-2xl border border-indigo-100 bg-indigo-50/60 p-4 sm:p-5 space-y-3">
+                        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+                          <div>
+                            <span className="text-[11px] font-extrabold uppercase tracking-wider text-indigo-800">Insurance Policy</span>
+                            <h4 className="text-sm font-black text-slate-950 mt-0.5">Policy {policy.policyNumber}</h4>
+                            {policy.planDescription && <p className="text-xs text-slate-600 mt-0.5">{policy.planDescription}</p>}
+                          </div>
+                          <span className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-[11px] font-extrabold uppercase w-fit ${
+                            policy.status === 'active' ? 'bg-emerald-100 text-emerald-800' :
+                            policy.status === 'payment_submitted' ? 'bg-sky-100 text-sky-800' :
+                            'bg-amber-100 text-amber-800'
+                          }`}>
+                            {policy.status === 'active' ? 'Active' : policy.status === 'payment_submitted' ? 'Payment Under Verification' : 'Awaiting Payment'}
+                          </span>
+                        </div>
+
+                        <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 text-xs">
+                          <div className="rounded-xl bg-white border border-indigo-100 p-3">
+                            <span className="text-slate-500 block">Security Amount</span>
+                            <strong className="text-slate-950">{formatINR(policy.securityAmount)}</strong>
+                          </div>
+                          <div className="rounded-xl bg-white border border-indigo-100 p-3">
+                            <span className="text-slate-500 block">Insurance Charges</span>
+                            <strong className="text-slate-950">{formatINR(policy.insuranceCharges)}</strong>
+                          </div>
+                          <div className="rounded-xl bg-white border border-indigo-100 p-3">
+                            <span className="text-slate-500 block">Total Premium</span>
+                            <strong className="text-slate-950">{formatINR(policy.totalAmount)}</strong>
+                          </div>
+                        </div>
+
+                        <div className="flex flex-wrap gap-2">
+                          {policy.status === 'issued' && (
+                            <button
+                              onClick={() => setSelectedInsurancePolicy(policy)}
+                              className="px-4 py-2 rounded-xl bg-indigo-700 hover:bg-indigo-800 text-xs font-extrabold text-white flex items-center gap-1.5 cursor-pointer shadow-xs"
+                            >
+                              Pay Insurance Premium via UPI
+                            </button>
+                          )}
+                          {policy.status === 'payment_submitted' && (
+                            <span className="text-[11px] text-sky-700 font-bold">Your payment is under verification. The certificate will unlock once approved.</span>
+                          )}
+                          {policy.status === 'active' && (
+                            <button
+                              onClick={() => generateInsuranceCertificatePDF(policy, app, settings)}
+                              className="px-4 py-2 rounded-xl bg-indigo-700 hover:bg-indigo-800 text-xs font-extrabold text-white flex items-center gap-1.5 cursor-pointer shadow-xs"
+                            >
+                              <Download className="w-3.5 h-3.5" /> Download Insurance Certificate PDF
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })()}
                 </div>
               );
             })}
@@ -709,6 +776,25 @@ export const CustomerDashboard: React.FC<CustomerDashboardProps> = ({
           onClose={() => setSelectedProcessingFeeApp(null)}
           onPaymentSubmitted={() => {
             setSelectedProcessingFeeApp(null);
+            loadData();
+          }}
+        />
+      )}
+
+      {/* Insurance Premium Payment Modal */}
+      {selectedInsurancePolicy && (
+        <UpiPaymentModal
+          settings={settings}
+          loanAccountId=""
+          applicationId={selectedInsurancePolicy.applicationId}
+          userId={user?.id || selectedInsurancePolicy.userId}
+          customerName={user?.fullName || selectedInsurancePolicy.customerName}
+          amountPayable={selectedInsurancePolicy.totalAmount}
+          purpose="insurance"
+          insurancePolicyId={selectedInsurancePolicy.id}
+          onClose={() => setSelectedInsurancePolicy(null)}
+          onPaymentSubmitted={() => {
+            setSelectedInsurancePolicy(null);
             loadData();
           }}
         />

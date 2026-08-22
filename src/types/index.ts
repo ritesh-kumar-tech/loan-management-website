@@ -233,8 +233,9 @@ export interface PaymentSubmission {
   userId: string;
   customerName: string;
   amount: number;
-  purpose: 'emi' | 'processing_fee' | 'foreclosure' | 'late_fee';
+  purpose: 'emi' | 'processing_fee' | 'foreclosure' | 'late_fee' | 'insurance';
   installmentNumber?: number;
+  insurancePolicyId?: string;
   upiIdUsed: string;
   utrNumber: string;
   proofScreenshotUrl?: string;
@@ -262,6 +263,25 @@ export interface Receipt {
   remainingBalance: number;
   nextDueDate: string;
   qrVerificationCode: string;
+}
+
+export interface InsurancePolicy {
+  id: string; // INS-2026-XXXXXX
+  applicationId: string;
+  userId: string;
+  customerName: string;
+  policyNumber: string;
+  eInsuranceAccountNo: string;
+  clientId: string;
+  planDescription: string;
+  securityAmount: number;
+  insuranceCharges: number;
+  totalAmount: number;
+  status: 'issued' | 'payment_submitted' | 'active' | 'cancelled';
+  paymentId?: string;
+  issuedAt: string;
+  issuedBy: string;
+  activatedAt?: string;
 }
 
 export interface SupportTicket {

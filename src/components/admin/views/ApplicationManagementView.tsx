@@ -23,29 +23,41 @@ import {
   Plus,
   Trash2
 } from 'lucide-react';
-import { LoanApplication, ApplicationStatus } from '../../../types';
+import { LoanApplication, ApplicationStatus, InsurancePolicy } from '../../../types';
 import { formatINR, formatDate, calculateEmi, calculateFOIR } from '../../../utils/calculator';
-import { 
-  generateSanctionLetter, 
+import {
+  generateSanctionLetter,
   generateGeneralLoanLetter,
-  generateLoanAgreement, 
+  generateLoanAgreement,
   generateApplicationEmiSchedulePDF,
-  generateProvisionalEligibilityLetter 
+  generateProvisionalEligibilityLetter
 } from '../../../utils/pdfGenerator';
 import { StatusBadge } from '../../shared/StatusBadge';
 
 interface ApplicationManagementViewProps {
   applications: LoanApplication[];
   settings: any;
+  insurancePolicies?: InsurancePolicy[];
   onUpdateStatus: (id: string, payload: any) => Promise<void>;
   onVerifyDocument: (appId: string, docId: string, status: string, note?: string) => Promise<void>;
+  onIssueInsurance?: (payload: {
+    applicationId: string;
+    policyNumber: string;
+    eInsuranceAccountNo?: string;
+    clientId?: string;
+    planDescription?: string;
+    securityAmount: number;
+    insuranceCharges: number;
+  }) => Promise<void>;
 }
 
 export const ApplicationManagementView: React.FC<ApplicationManagementViewProps> = ({
   applications,
   settings,
+  insurancePolicies = [],
   onUpdateStatus,
   onVerifyDocument,
+  onIssueInsurance,
 }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
@@ -65,6 +77,13 @@ export const ApplicationManagementView: React.FC<ApplicationManagementViewProps>
   const [docRejectNote, setDocRejectNote] = useState('');
   const [processingBaseFee, setProcessingBaseFee] = useState(2000);
   const [processingExpenses, setProcessingExpenses] = useState<{ id: string; label: string; amount: number }[]>([]);
+  const [insurancePolicyNumber, setInsurancePolicyNumber] = useState('');
+  const [insuranceEAccountNo, setInsuranceEAccountNo] = useState('');
+  const [insuranceClientId, setInsuranceClientId] = useState('');
+  const [insurancePlanDescription, setInsurancePlanDescription] = useState('');
+  const [insuranceSecurityAmount, setInsuranceSecurityAmount] = useState(6263);
+  const [insuranceCharges, setInsuranceCharges] = useState(6263);
+  const [isIssuingInsurance, setIsIssuingInsurance] = useState(false);
 
   const filteredApps = applications.filter((app) => {
     const matchesSearch = 
@@ -91,6 +110,12 @@ export const ApplicationManagementView: React.FC<ApplicationManagementViewProps>
     setDocRejectNote('');
     setProcessingBaseFee(app.processingFee || Math.round(((app.approvedAmount || app.requestedAmount || 0) * 1.5) / 100) || 2000);
     setProcessingExpenses([]);
+    setInsurancePolicyNumber('');
+    setInsuranceEAccountNo('');
+    setInsuranceClientId('');
+    setInsurancePlanDescription('');
+    setInsuranceSecurityAmount(6263);
+    setInsuranceCharges(6263);
   };
 
   const handleApprove = async () => {
@@ -514,6 +539,115 @@ export const ApplicationManagementView: React.FC<ApplicationManagementViewProps>
                 />
               </div>
             </div>
+
+            {/* Insurance Policy Management */}
+            {(() => {
+              const existingPolicy = insurancePolicies.find((p) => p.applicationId === selectedApp.id);
+              return (
+                <div className="bg-indigo-50 border border-indigo-200 rounded-2xl p-4 space-y-3 text-xs">
+                  <h4 className="font-bold text-indigo-950 text-sm flex items-center gap-2">
+                    <ShieldCheck className="w-4 h-4 text-indigo-700" /> Insurance Policy Management
+                  </h4>
+
+                  {existingPolicy ? (
+                    <div className="bg-white p-3 rounded-xl border border-indigo-100 space-y-2">
+                      <div className="flex items-center justify-between">
+                        <span className="font-bold text-slate-900">Policy {existingPolicy.policyNumber}</span>
+                        <span className={`px-2.5 py-1 rounded-full font-bold uppercase text-[10px] ${
+                          existingPolicy.status === 'active' ? 'bg-emerald-100 text-emerald-800' :
+                          existingPolicy.status === 'payment_submitted' ? 'bg-sky-100 text-sky-800' :
+                          'bg-amber-100 text-amber-800'
+                        }`}>
+                          {existingPolicy.status === 'active' ? 'Active' : existingPolicy.status === 'payment_submitted' ? 'Payment Under Verification' : 'Issued & Awaiting Payment'}
+                        </span>
+                      </div>
+                      <div className="grid grid-cols-2 gap-2 text-[11px] text-slate-600">
+                        <span>Security Amount: <strong className="text-slate-900">{formatINR(existingPolicy.securityAmount)}</strong></span>
+                        <span>Insurance Charges: <strong className="text-slate-900">{formatINR(existingPolicy.insuranceCharges)}</strong></span>
+                        <span>Total Premium: <strong className="text-slate-900">{formatINR(existingPolicy.totalAmount)}</strong></span>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="bg-white p-3 rounded-xl border border-indigo-100 space-y-3">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                        <input
+                          type="text"
+                          value={insurancePolicyNumber}
+                          onChange={(e) => setInsurancePolicyNumber(e.target.value)}
+                          placeholder="Policy Number *"
+                          className="px-2.5 py-1.5 border border-slate-300 rounded-lg text-xs"
+                        />
+                        <input
+                          type="text"
+                          value={insuranceEAccountNo}
+                          onChange={(e) => setInsuranceEAccountNo(e.target.value)}
+                          placeholder="e-Insurance A/C No"
+                          className="px-2.5 py-1.5 border border-slate-300 rounded-lg text-xs"
+                        />
+                        <input
+                          type="text"
+                          value={insuranceClientId}
+                          onChange={(e) => setInsuranceClientId(e.target.value)}
+                          placeholder="Client ID"
+                          className="px-2.5 py-1.5 border border-slate-300 rounded-lg text-xs"
+                        />
+                        <input
+                          type="text"
+                          value={insurancePlanDescription}
+                          onChange={(e) => setInsurancePlanDescription(e.target.value)}
+                          placeholder="Plan description"
+                          className="px-2.5 py-1.5 border border-slate-300 rounded-lg text-xs"
+                        />
+                        <label className="text-[11px] text-slate-500 flex items-center gap-2">
+                          Security Amount
+                          <input
+                            type="number"
+                            value={insuranceSecurityAmount}
+                            onChange={(e) => setInsuranceSecurityAmount(Number(e.target.value))}
+                            className="w-full px-2.5 py-1.5 border border-slate-300 rounded-lg text-xs font-bold"
+                          />
+                        </label>
+                        <label className="text-[11px] text-slate-500 flex items-center gap-2">
+                          Insurance Charges
+                          <input
+                            type="number"
+                            value={insuranceCharges}
+                            onChange={(e) => setInsuranceCharges(Number(e.target.value))}
+                            className="w-full px-2.5 py-1.5 border border-slate-300 rounded-lg text-xs font-bold"
+                          />
+                        </label>
+                      </div>
+                      <div className="flex items-center justify-between pt-1">
+                        <span className="text-[11px] text-slate-500">Total Premium: <strong className="text-slate-900">{formatINR(insuranceSecurityAmount + insuranceCharges)}</strong></span>
+                        <button
+                          disabled={!insurancePolicyNumber.trim() || isIssuingInsurance}
+                          onClick={async () => {
+                            if (!onIssueInsurance) return;
+                            setIsIssuingInsurance(true);
+                            try {
+                              await onIssueInsurance({
+                                applicationId: selectedApp.id,
+                                policyNumber: insurancePolicyNumber.trim(),
+                                eInsuranceAccountNo: insuranceEAccountNo.trim() || undefined,
+                                clientId: insuranceClientId.trim() || undefined,
+                                planDescription: insurancePlanDescription.trim() || undefined,
+                                securityAmount: insuranceSecurityAmount,
+                                insuranceCharges: insuranceCharges,
+                              });
+                            } finally {
+                              setIsIssuingInsurance(false);
+                            }
+                          }}
+                          className="px-4 py-2 rounded-xl bg-indigo-700 hover:bg-indigo-800 disabled:opacity-50 disabled:cursor-not-allowed text-white font-bold text-xs cursor-pointer"
+                        >
+                          {isIssuingInsurance ? 'Issuing...' : 'Issue Insurance Policy'}
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              );
+            })()}
 
             {/* Processing Fee Control Section */}
             <div className="bg-sky-50 border border-sky-200 rounded-2xl p-4 space-y-3 text-xs">

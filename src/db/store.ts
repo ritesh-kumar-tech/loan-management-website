@@ -7,6 +7,7 @@ import {
   LoanAccount,
   LoanApplication,
   LoanProduct,
+  InsurancePolicy,
   PaymentSubmission,
   Receipt,
   SupportTicket,
@@ -343,6 +344,7 @@ export const getCollections = () => ({
   loanAccounts: tableData<LoanAccount>('loan_accounts'),
   paymentSubmissions: tableData<PaymentSubmission>('payment_submissions'),
   receipts: tableData<Receipt>('receipts'),
+  insurancePolicies: tableData<InsurancePolicy>('insurance_policies'),
   supportTickets: tableData<SupportTicket>('support_tickets'),
   notifications: tableData<AppNotification>('notifications'),
   auditLogs: tableData<AuditLog>('audit_logs'),
@@ -497,6 +499,19 @@ export const saveReceipt = (receipt: Receipt) => {
        ON CONFLICT(receipt_number) DO UPDATE SET data_json = excluded.data_json`
     )
     .run({ ...receipt, dataJson: toJson(receipt) });
+};
+
+export const saveInsurancePolicy = (policy: InsurancePolicy) => {
+  getDb()
+    .prepare(
+      `INSERT INTO insurance_policies
+       (id, application_id, user_id, customer_name, policy_number, status, data_json, created_at, updated_at)
+       VALUES (@id, @applicationId, @userId, @customerName, @policyNumber, @status, @dataJson, @createdAt, @updatedAt)
+       ON CONFLICT(id) DO UPDATE SET
+         application_id = excluded.application_id, user_id = excluded.user_id, customer_name = excluded.customer_name,
+         policy_number = excluded.policy_number, status = excluded.status, data_json = excluded.data_json, updated_at = excluded.updated_at`
+    )
+    .run({ ...policy, createdAt: policy.issuedAt, dataJson: toJson(policy), updatedAt: now() });
 };
 
 export const saveSupportTicket = (ticket: SupportTicket) => {

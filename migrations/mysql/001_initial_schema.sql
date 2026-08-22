@@ -105,7 +105,7 @@ CREATE TABLE IF NOT EXISTS payment_submissions (
   user_id VARCHAR(64) NOT NULL,
   customer_name VARCHAR(180) NOT NULL,
   amount INT NOT NULL,
-  purpose ENUM('emi', 'processing_fee', 'foreclosure', 'late_fee') NOT NULL,
+  purpose ENUM('emi', 'processing_fee', 'foreclosure', 'late_fee', 'insurance') NOT NULL,
   utr_number VARCHAR(80) NOT NULL UNIQUE,
   status ENUM('pending_verification', 'verified', 'rejected') NOT NULL,
   data_json JSON NOT NULL,
@@ -114,6 +114,25 @@ CREATE TABLE IF NOT EXISTS payment_submissions (
   INDEX idx_payment_submissions_application_id (application_id),
   INDEX idx_payment_submissions_loan_account_id (loan_account_id),
   INDEX idx_payment_submissions_status (status)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- This file re-runs on every server start (see initializeMysqlDatabase); the
+-- CREATE TABLE above only takes effect for a brand new database, so widen the
+-- purpose enum on an already-existing table too. Safe to repeat every start.
+ALTER TABLE payment_submissions MODIFY COLUMN purpose ENUM('emi', 'processing_fee', 'foreclosure', 'late_fee', 'insurance') NOT NULL;
+
+CREATE TABLE IF NOT EXISTS insurance_policies (
+  id VARCHAR(64) PRIMARY KEY,
+  application_id VARCHAR(64) NOT NULL,
+  user_id VARCHAR(64) NOT NULL,
+  customer_name VARCHAR(180) NOT NULL,
+  policy_number VARCHAR(80) NOT NULL,
+  status ENUM('issued', 'payment_submitted', 'active', 'cancelled') NOT NULL,
+  data_json JSON NOT NULL,
+  created_at DATETIME NOT NULL,
+  updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  INDEX idx_insurance_policies_application_id (application_id),
+  INDEX idx_insurance_policies_user_id (user_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE IF NOT EXISTS receipts (
