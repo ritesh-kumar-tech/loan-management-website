@@ -23,7 +23,8 @@ import {
   Plus,
   Trash2
 } from 'lucide-react';
-import { LoanApplication, ApplicationStatus } from '../../../types';
+import { LoanApplication, ApplicationStatus, LoanFeeRequest } from '../../../types';
+import { api } from '../../../services/api';
 import { formatINR, formatDate, calculateEmi, calculateFOIR } from '../../../utils/calculator';
 import { 
   generateSanctionLetter, 
@@ -39,6 +40,7 @@ interface ApplicationManagementViewProps {
   settings: any;
   onUpdateStatus: (id: string, payload: any) => Promise<void>;
   onVerifyDocument: (appId: string, docId: string, status: string, note?: string) => Promise<void>;
+  onRefresh?: () => Promise<void>;
 }
 
 export const ApplicationManagementView: React.FC<ApplicationManagementViewProps> = ({
@@ -46,6 +48,7 @@ export const ApplicationManagementView: React.FC<ApplicationManagementViewProps>
   settings,
   onUpdateStatus,
   onVerifyDocument,
+  onRefresh,
 }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
@@ -64,7 +67,7 @@ export const ApplicationManagementView: React.FC<ApplicationManagementViewProps>
   const [rejectingDocId, setRejectingDocId] = useState<string | null>(null);
   const [docRejectNote, setDocRejectNote] = useState('');
   const [processingBaseFee, setProcessingBaseFee] = useState(2000);
-  const [processingExpenses, setProcessingExpenses] = useState<{ id: string; label: string; amount: number }[]>([]);
+  const [processingExpenses, setProcessingExpenses] = useState<{ id: string; label: string; amount: number; description?: string }[]>([]);
 
   const filteredApps = applications.filter((app) => {
     const matchesSearch = 
@@ -89,7 +92,8 @@ export const ApplicationManagementView: React.FC<ApplicationManagementViewProps>
     setPreviewedDocId(null);
     setRejectingDocId(null);
     setDocRejectNote('');
-    setProcessingBaseFee(app.processingFee || Math.round(((app.approvedAmount || app.requestedAmount || 0) * 1.5) / 100) || 2000);
+    const hasExistingFeeCycle = Boolean(app.feeRequests?.length) || app.status === 'processing_fee_submitted' || app.status === 'payment_verified' || app.status === 'approved' || app.status === 'active' || app.status === 'loan_disbursed';
+    setProcessingBaseFee(hasExistingFeeCycle ? 0 : app.processingFee || Math.round(((app.approvedAmount || app.requestedAmount || 0) * 1.5) / 100) || 2000);
     setProcessingExpenses([]);
   };
 
@@ -146,8 +150,39 @@ export const ApplicationManagementView: React.FC<ApplicationManagementViewProps>
 
   // Preview EMI calculation in approval box
   const previewCalc = calculateEmi(approveAmount, approveRate, approveTenure, 1.5);
+  const feeRequests = (selectedApp?.feeRequests || []) as LoanFeeRequest[];
+  const paidFeeTotal = feeRequests.filter((fee) => fee.status === 'paid').reduce((sum, fee) => sum + Number(fee.amount || 0), 0);
+  const pendingFeeTotal = feeRequests.filter((fee) => fee.status === 'pending').reduce((sum, fee) => sum + Number(fee.amount || 0), 0);
+  const totalFeeHistory = feeRequests.reduce((sum, fee) => sum + Number(fee.amount || 0), 0);
   const processingExpenseTotal = processingExpenses.reduce((sum, item) => sum + (Number(item.amount) || 0), 0);
-  const processingFeeTotal = Math.max(0, Number(processingBaseFee) || 0) + processingExpenseTotal;
+  const hasExistingFeeCycle = feeRequests.length > 0 || selectedApp?.status === 'processing_fee_submitted' || selectedApp?.status === 'payment_verified' || selectedApp?.status === 'approved' || selectedApp?.status === 'active' || selectedApp?.status === 'loan_disbursed';
+  const draftBaseFee = hasExistingFeeCycle ? 0 : Math.max(0, Number(processingBaseFee) || 0);
+  const processingFeeTotal = draftBaseFee + processingExpenseTotal;
+  const draftFees = [
+    ...(draftBaseFee > 0 ? [{ feeType: 'Processing Fee', description: 'Loan application processing fee', amount: draftBaseFee }] : []),
+    ...processingExpenses.map((expense) => ({
+      feeType: expense.label,
+      description: expense.description,
+      amount: Number(expense.amount) || 0,
+    })),
+  ];
+  const canSendFeeRequest = processingFeeTotal > 0 && pendingFeeTotal === 0 && !isActionLoading;
+
+  const handleSendFeeRequest = async () => {
+    if (!selectedApp || !canSendFeeRequest) return;
+    setIsActionLoading(true);
+    try {
+      const result = await api.requestProcessingFees(selectedApp.id, draftFees);
+      if (result.success && result.application) {
+        setSelectedApp(result.application);
+        setProcessingExpenses([]);
+        setProcessingBaseFee(0);
+        await onRefresh?.();
+      }
+    } finally {
+      setIsActionLoading(false);
+    }
+  };
 
   return (
     <div className="space-y-6 animate-in fade-in duration-150">
@@ -525,11 +560,11 @@ export const ApplicationManagementView: React.FC<ApplicationManagementViewProps>
                 <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl text-amber-800 font-medium">
                   <strong>Notice:</strong> All mandatory documents must be verified before the processing fee can be requested. ({selectedApp.documents?.filter((d) => d.status !== 'verified').length} document(s) pending).
                 </div>
-              ) : selectedApp.status === 'documents_verified' || selectedApp.status === 'submitted' || selectedApp.status === 'under_review' ? (
+              ) : (
                 <div className="bg-white p-3 rounded-xl border border-sky-100 space-y-3">
                   <div>
                     <span className="font-bold text-slate-900 block text-xs">All Documents Verified ✓</span>
-                    <span className="text-slate-500 text-[11px]">Request customer to pay loan application processing fee.</span>
+                    <span className="text-slate-500 text-[11px]">Request customer to pay the current unpaid fee amount. Paid fees remain locked.</span>
                   </div>
                   <div className="flex items-center gap-2">
                     <input
@@ -540,24 +575,11 @@ export const ApplicationManagementView: React.FC<ApplicationManagementViewProps>
                       placeholder="₹2000"
                     />
                     <button
-                      onClick={async () => {
-                        setIsActionLoading(true);
-                        try {
-                          const fee = processingFeeTotal;
-                          await onUpdateStatus(selectedApp.id, {
-                            status: 'processing_fee_pending',
-                            processingFee: fee,
-                            note: `Processing fee of ₹${fee} requested by Admin.`,
-                          });
-                          setSelectedApp({ ...selectedApp, status: 'processing_fee_pending', processingFee: fee });
-                        } finally {
-                          setIsActionLoading(false);
-                        }
-                      }}
-                      disabled={processingFeeTotal <= 0 || isActionLoading}
+                      onClick={handleSendFeeRequest}
+                      disabled={!canSendFeeRequest}
                       className="px-4 py-2 bg-sky-700 hover:bg-sky-800 text-white font-bold rounded-xl text-xs cursor-pointer shadow-xs disabled:opacity-50"
                     >
-                      Send Fee Request
+                      {pendingFeeTotal > 0 ? 'Request Pending' : 'Send Fee Request'}
                     </button>
                   </div>
 
@@ -573,12 +595,18 @@ export const ApplicationManagementView: React.FC<ApplicationManagementViewProps>
                     </div>
 
                     {processingExpenses.map((expense) => (
-                      <div key={expense.id} className="grid grid-cols-1 sm:grid-cols-[1fr_120px_32px] gap-2">
+                      <div key={expense.id} className="grid grid-cols-1 sm:grid-cols-[1fr_1fr_120px_32px] gap-2">
                         <input
                           value={expense.label}
                           onChange={(e) => setProcessingExpenses(processingExpenses.map((item) => item.id === expense.id ? { ...item, label: e.target.value } : item))}
                           className="w-full px-3 py-2 border border-slate-200 rounded-lg text-xs font-semibold"
                           placeholder="Expense name"
+                        />
+                        <input
+                          value={expense.description || ''}
+                          onChange={(e) => setProcessingExpenses(processingExpenses.map((item) => item.id === expense.id ? { ...item, description: e.target.value } : item))}
+                          className="w-full px-3 py-2 border border-slate-200 rounded-lg text-xs"
+                          placeholder="Description (optional)"
                         />
                         <input
                           type="number"
@@ -597,36 +625,37 @@ export const ApplicationManagementView: React.FC<ApplicationManagementViewProps>
                       </div>
                     ))}
 
-                    <div className="rounded-xl bg-slate-900 text-white p-3 grid grid-cols-1 sm:grid-cols-3 gap-2 text-[11px]">
-                      <div>Base Fee: <strong>{formatINR(processingBaseFee || 0)}</strong></div>
+                    <div className="rounded-xl bg-slate-900 text-white p-3 grid grid-cols-1 sm:grid-cols-5 gap-2 text-[11px]">
+                      <div>Base Fee: <strong>{formatINR(draftBaseFee)}</strong></div>
                       <div>Other Expenses: <strong>{formatINR(processingExpenseTotal)}</strong></div>
-                      <div className="sm:text-right">Total Payable: <strong className="text-emerald-300">{formatINR(processingFeeTotal)}</strong></div>
+                      <div>Total Fees: <strong>{formatINR(totalFeeHistory + processingFeeTotal)}</strong></div>
+                      <div>Already Paid: <strong>{formatINR(paidFeeTotal)}</strong></div>
+                      <div className="sm:text-right">Current Payable: <strong className="text-emerald-300">{formatINR(pendingFeeTotal || processingFeeTotal)}</strong></div>
                     </div>
+
+                    {feeRequests.length > 0 && (
+                      <div className="rounded-xl border border-slate-200 overflow-hidden">
+                        <div className="bg-slate-50 px-3 py-2 text-[11px] font-extrabold uppercase tracking-wider text-slate-500">Fee history</div>
+                        <div className="divide-y divide-slate-100">
+                          {feeRequests.map((fee) => (
+                            <div key={fee.id} className="grid grid-cols-1 sm:grid-cols-[1.2fr_90px_95px_85px_1fr] gap-2 px-3 py-2 text-[11px]">
+                              <div>
+                                <strong className="block text-slate-900">{fee.feeType}</strong>
+                                {fee.description && <span className="text-slate-500">{fee.description}</span>}
+                              </div>
+                              <div className="font-bold text-slate-900">{formatINR(fee.amount)}</div>
+                              <div>{fee.requestedAt ? formatDate(fee.requestedAt) : '-'}</div>
+                              <div className="font-extrabold uppercase text-sky-800">{fee.status}</div>
+                              <div className="break-all">
+                                {fee.paidAt ? `Paid ${formatDate(fee.paidAt)}` : 'Not paid'}
+                                {fee.paymentReference && <span className="block font-mono text-slate-500">{fee.paymentReference}</span>}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
                   </div>
-                </div>
-              ) : selectedApp.status === 'processing_fee_submitted' ? (
-                <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-xl space-y-2 text-emerald-950">
-                  <div className="font-bold text-xs">Processing Fee Payment Submitted by Customer</div>
-                  <p className="text-[11px]">Amount: <strong>{formatINR(selectedApp.processingFee || 2000)}</strong>. Review payment submission proof in the Payments verification section.</p>
-                  <div className="flex gap-2 pt-1">
-                    <button
-                      onClick={async () => {
-                        await onUpdateStatus(selectedApp.id, {
-                          status: 'payment_verified',
-                          note: 'Processing fee payment verified by Admin.',
-                        });
-                        setSelectedApp({ ...selectedApp, status: 'payment_verified' });
-                      }}
-                      className="px-3 py-1.5 bg-emerald-700 hover:bg-emerald-800 text-white font-bold rounded-lg text-xs cursor-pointer"
-                    >
-                      Verify Processing Fee Payment
-                    </button>
-                  </div>
-                </div>
-              ) : (
-                <div className="p-3 bg-white rounded-xl border border-sky-100 text-slate-700 font-semibold flex items-center justify-between">
-                  <span>Processing Fee: <strong>{formatINR(selectedApp.processingFee || 2000)}</strong></span>
-                  <span className="text-emerald-700 font-bold uppercase text-[11px]">Status: {selectedApp.status.replace(/_/g, ' ')}</span>
                 </div>
               )}
             </div>

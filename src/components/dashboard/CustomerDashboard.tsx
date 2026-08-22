@@ -58,6 +58,9 @@ export const CustomerDashboard: React.FC<CustomerDashboardProps> = ({
   const [newTicketSubject, setNewTicketSubject] = useState('');
   const [newTicketMessage, setNewTicketMessage] = useState('');
 
+  const getPendingFeeRequests = (app: LoanApplication) => (app.feeRequests || []).filter((fee) => fee.status === 'pending');
+  const getPendingFeeAmount = (app: LoanApplication) => getPendingFeeRequests(app).reduce((sum, fee) => sum + Number(fee.amount || 0), 0);
+
   const loadData = async () => {
     setLoading(true);
     try {
@@ -271,9 +274,11 @@ export const CustomerDashboard: React.FC<CustomerDashboardProps> = ({
           <div className="grid grid-cols-1 gap-4">
             {applications.map((app) => {
               const allDocsVerified = app.documents && app.documents.length > 0 && app.documents.every((d) => d.status === 'verified');
-              const isFeePending = app.status === 'processing_fee_pending';
+              const pendingFeeRequests = getPendingFeeRequests(app);
+              const pendingFeeAmount = pendingFeeRequests.length ? getPendingFeeAmount(app) : app.status === 'processing_fee_pending' ? app.processingFee || 2000 : 0;
+              const isFeePending = pendingFeeAmount > 0;
               const isFeeSubmitted = app.status === 'processing_fee_submitted';
-              const isFeeVerified = app.status === 'payment_verified' || app.status === 'approved' || app.status === 'active' || app.status === 'loan_disbursed';
+              const isFeeVerified = (pendingFeeAmount === 0 && (app.feeRequests || []).some((fee) => fee.status === 'paid')) || app.status === 'payment_verified' || app.status === 'approved' || app.status === 'active' || app.status === 'loan_disbursed';
 
               return (
                 <div key={app.id} className="bg-white p-6 rounded-2xl border border-slate-200 shadow-xs space-y-5">
@@ -316,14 +321,14 @@ export const CustomerDashboard: React.FC<CustomerDashboardProps> = ({
                           <AlertCircle className="w-5 h-5 text-amber-600 shrink-0" /> Documents Verified — Processing Fee Required
                         </div>
                         <p className="text-xs text-amber-800 mt-1">
-                          Your uploaded documents have been verified by our credit team. Please pay the loan application processing fee of <strong>{formatINR(app.processingFee || 2000)}</strong> to proceed to final underwriting.
+                          Your uploaded documents have been verified by our credit team. Please pay the current pending fee request of <strong>{formatINR(pendingFeeAmount)}</strong> to proceed.
                         </p>
                       </div>
                       <button
                         onClick={() => setSelectedProcessingFeeApp(app)}
                         className="px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-xs uppercase tracking-wider rounded-xl shadow-md transition-all shrink-0 cursor-pointer flex items-center gap-1.5"
                       >
-                        <CreditCard className="w-4 h-4" /> Pay Processing Fee ({formatINR(app.processingFee || 2000)})
+                        <CreditCard className="w-4 h-4" /> Pay Processing Fee ({formatINR(pendingFeeAmount)})
                       </button>
                     </div>
                   )}
@@ -697,22 +702,28 @@ export const CustomerDashboard: React.FC<CustomerDashboardProps> = ({
       )}
 
       {/* Processing Fee Payment Modal */}
-      {selectedProcessingFeeApp && (
-        <UpiPaymentModal
-          settings={settings}
-          loanAccountId=""
-          applicationId={selectedProcessingFeeApp.id}
-          userId={user?.id || selectedProcessingFeeApp.userId}
-          customerName={user?.fullName || selectedProcessingFeeApp.personalInfo.fullName}
-          amountPayable={selectedProcessingFeeApp.processingFee || 2000}
-          purpose="processing_fee"
-          onClose={() => setSelectedProcessingFeeApp(null)}
-          onPaymentSubmitted={() => {
-            setSelectedProcessingFeeApp(null);
-            loadData();
-          }}
-        />
-      )}
+      {selectedProcessingFeeApp && (() => {
+        const pendingFeeRequests = getPendingFeeRequests(selectedProcessingFeeApp);
+        const pendingFeeAmount = pendingFeeRequests.length ? getPendingFeeAmount(selectedProcessingFeeApp) : selectedProcessingFeeApp.processingFee || 2000;
+
+        return (
+          <UpiPaymentModal
+            settings={settings}
+            loanAccountId=""
+            applicationId={selectedProcessingFeeApp.id}
+            userId={user?.id || selectedProcessingFeeApp.userId}
+            customerName={user?.fullName || selectedProcessingFeeApp.personalInfo.fullName}
+            amountPayable={pendingFeeAmount}
+            purpose="processing_fee"
+            feeRequestIds={pendingFeeRequests.map((fee) => fee.id)}
+            onClose={() => setSelectedProcessingFeeApp(null)}
+            onPaymentSubmitted={() => {
+              setSelectedProcessingFeeApp(null);
+              loadData();
+            }}
+          />
+        );
+      })()}
 
       {/* New Ticket Modal */}
       {showNewTicketModal && (

@@ -7,7 +7,7 @@ import multer from 'multer';
 import { createServer as createViteServer } from 'vite';
 import { calculateEmi, calculateFOIR } from './src/utils/calculator';
 import { APPLICATION_STATUSES } from './src/utils/statusConfig';
-import { ApplicationStatus, AppNotification, EligibilityResult, LoanApplication, Receipt, SupportTicket } from './src/types';
+import { ApplicationStatus, AppNotification, EligibilityResult, LoanApplication, LoanFeeRequest, Receipt, SupportTicket } from './src/types';
 import {
   applicationIdExists,
   findUserAuthByEmail,
@@ -832,6 +832,54 @@ export async function createApp({ serveClient = true }: CreateAppOptions = {}) {
 
   const VALID_APPLICATION_STATUSES = new Set(APPLICATION_STATUSES.map((item) => item.value));
 
+  const getApplicationFeeRequests = (appItem: LoanApplication): LoanFeeRequest[] => {
+    appItem.feeRequests = Array.isArray(appItem.feeRequests) ? appItem.feeRequests : [];
+    return appItem.feeRequests;
+  };
+
+  const syncLegacyProcessingFeeRequests = (appItem: LoanApplication) => {
+    const feeRequests = getApplicationFeeRequests(appItem);
+    if (feeRequests.length || !appItem.processingFee) return feeRequests;
+
+    const relatedPayments = paymentSubmissions.filter((payment) =>
+      payment.applicationId === appItem.id && payment.purpose === 'processing_fee'
+    );
+    const verifiedPayment = relatedPayments.find((payment) => payment.status === 'verified');
+    const pendingPayment = relatedPayments.find((payment) => payment.status === 'pending_verification');
+    const payment = verifiedPayment || pendingPayment;
+
+    if (!payment && appItem.status !== 'payment_verified' && appItem.status !== 'processing_fee_submitted') {
+      return feeRequests;
+    }
+
+    const nowIso = new Date().toISOString();
+    const legacyRequest: LoanFeeRequest = {
+      id: `FEE-LEGACY-${appItem.id}`,
+      applicationId: appItem.id,
+      customerId: appItem.userId || 'usr_guest',
+      feeType: 'Processing Fee',
+      description: 'Legacy processing fee request',
+      amount: Number(appItem.processingFee),
+      status: verifiedPayment || appItem.status === 'payment_verified' ? 'paid' : 'pending',
+      paymentReference: payment?.id,
+      requestedAt: appItem.updatedAt || nowIso,
+      paidAt: verifiedPayment?.verifiedAt,
+      createdBy: 'Admin',
+      createdAt: appItem.updatedAt || nowIso,
+      updatedAt: nowIso,
+    };
+    appItem.feeRequests = [legacyRequest];
+    return appItem.feeRequests;
+  };
+
+  const getPendingFeeRequests = (appItem: LoanApplication): LoanFeeRequest[] => (
+    syncLegacyProcessingFeeRequests(appItem).filter((fee) => fee.status === 'pending')
+  );
+
+  const getPendingFeeAmount = (appItem: LoanApplication): number => (
+    getPendingFeeRequests(appItem).reduce((sum, fee) => sum + Number(fee.amount || 0), 0)
+  );
+
   // Application Status Change (Admin approval, rejection, request info)
   app.patch('/api/applications/:id/status', requireRole('admin'), ah(async (req, res) => {
     const { id } = req.params;
@@ -934,10 +982,10 @@ export async function createApp({ serveClient = true }: CreateAppOptions = {}) {
     res.json({ success: true, application: appItem });
   }));
 
-  // Admin Request Processing Fee (Only allowed if all docs are verified)
+  // Admin Request Processing Fee (multi-request flow; keeps paid fees immutable)
   app.post('/api/applications/:id/request-processing-fee', requireRole('admin'), ah(async (req, res) => {
     const { id } = req.params;
-    const { feeAmount } = req.body;
+    const { feeAmount, fees } = req.body;
     const appItem = applications.find((a) => a.id === id);
 
     if (!appItem) {
@@ -945,7 +993,6 @@ export async function createApp({ serveClient = true }: CreateAppOptions = {}) {
       return;
     }
 
-    // Check if mandatory documents are verified
     const unverifiedDocs = appItem.documents.filter((d) => d.status !== 'verified');
     if (unverifiedDocs.length > 0) {
       res.status(400).json({
@@ -955,19 +1002,55 @@ export async function createApp({ serveClient = true }: CreateAppOptions = {}) {
       return;
     }
 
-    const fee = Number(feeAmount) || appItem.processingFee || 2000;
-    const previousStatus = appItem.status;
-    appItem.processingFee = fee;
-    appItem.status = 'processing_fee_pending';
-    if (previousStatus !== 'processing_fee_pending') {
-      appItem.statusHistory.push({
-        status: 'processing_fee_pending',
-        date: new Date().toISOString(),
-        note: `Processing fee requested by Admin: ₹${fee.toLocaleString('en-IN')}`,
-        updatedBy: 'Admin',
-      });
+    syncLegacyProcessingFeeRequests(appItem);
+    if (getPendingFeeRequests(appItem).length > 0) {
+      res.status(409).json({ success: false, error: 'A processing fee request is already pending for this application.' });
+      return;
     }
-    appItem.updatedAt = new Date().toISOString();
+
+    const requestedFees = Array.isArray(fees) && fees.length
+      ? fees.map((item: any) => ({
+        feeType: String(item.feeType || item.label || 'Additional Fee').trim(),
+        description: item.description ? String(item.description).trim() : undefined,
+        amount: Number(item.amount),
+      }))
+      : [{
+        feeType: 'Processing Fee',
+        description: 'Loan application processing fee',
+        amount: Number(feeAmount) || appItem.processingFee || 2000,
+      }];
+    const invalidFee = requestedFees.find((item) => !item.feeType || !Number.isFinite(item.amount) || item.amount <= 0);
+    if (invalidFee) {
+      res.status(400).json({ success: false, error: 'Each fee request must include a title and an amount greater than zero.' });
+      return;
+    }
+
+    const nowIso = new Date().toISOString();
+    const newFeeRequests: LoanFeeRequest[] = requestedFees.map((item, index) => ({
+      id: `FEE-2026-${Date.now()}-${index + 1}`,
+      applicationId: appItem.id,
+      customerId: appItem.userId || 'usr_guest',
+      feeType: item.feeType,
+      description: item.description,
+      amount: Math.round(item.amount),
+      status: 'pending',
+      requestedAt: nowIso,
+      createdBy: 'Admin',
+      createdAt: nowIso,
+      updatedAt: nowIso,
+    }));
+    const fee = newFeeRequests.reduce((sum, item) => sum + item.amount, 0);
+    const previousStatus = appItem.status;
+    appItem.feeRequests = [...getApplicationFeeRequests(appItem), ...newFeeRequests];
+    appItem.processingFee = appItem.feeRequests.reduce((sum, item) => sum + Number(item.amount || 0), 0);
+    appItem.status = 'processing_fee_pending';
+    appItem.statusHistory.push({
+      status: 'processing_fee_pending',
+      date: nowIso,
+      note: `Processing fee requested by Admin: Rs ${fee.toLocaleString('en-IN')}`,
+      updatedBy: 'Admin',
+    });
+    appItem.updatedAt = nowIso;
     await saveApplication(appItem);
     void sendApplicationStatusEmail(settings, appItem, previousStatus);
 
@@ -978,7 +1061,7 @@ export async function createApp({ serveClient = true }: CreateAppOptions = {}) {
       type: 'warning',
       link: `/dashboard/applications/${appItem.id}`,
     });
-    addAuditLog('usr_admin_1', 'admin', 'admin@dhanifinance.in', 'PROCESSING_FEE_REQUESTED', 'LoanApplication', appItem.id, `Requested processing fee ₹${fee}`);
+    addAuditLog('usr_admin_1', 'admin', 'admin@dhanifinance.in', 'PROCESSING_FEE_REQUESTED', 'LoanApplication', appItem.id, `Requested processing fee Rs ${fee}`);
     res.json({ success: true, application: appItem });
   }));
 
@@ -1000,7 +1083,7 @@ export async function createApp({ serveClient = true }: CreateAppOptions = {}) {
 
   // Payments: Submit Proof
   app.post('/api/payments/submit', ah(async (req, res) => {
-    const { loanAccountId, applicationId, userId, customerName, amount, purpose, utrNumber, proofScreenshotUrl, installmentNumber } = req.body;
+    const { loanAccountId, applicationId, userId, customerName, amount, purpose, utrNumber, proofScreenshotUrl, installmentNumber, feeRequestIds } = req.body;
 
     if (!utrNumber || !String(utrNumber).trim()) {
       res.status(400).json({ success: false, error: 'A valid UTR / transaction reference number is required.' });
@@ -1024,6 +1107,33 @@ export async function createApp({ serveClient = true }: CreateAppOptions = {}) {
     }
 
     const paymentPurpose = purpose || 'emi';
+    const linkedFeeRequestIds = Array.isArray(feeRequestIds) ? feeRequestIds.map((item) => String(item)).filter(Boolean) : [];
+    if (paymentPurpose === 'processing_fee') {
+      const appItem = applications.find((a) => a.id === applicationId);
+      if (!appItem) {
+        res.status(404).json({ success: false, error: 'Application not found for processing fee payment.' });
+        return;
+      }
+      const pendingFeeRequests = getPendingFeeRequests(appItem);
+      const payableFeeRequests = linkedFeeRequestIds.length
+        ? pendingFeeRequests.filter((fee) => linkedFeeRequestIds.includes(fee.id))
+        : pendingFeeRequests;
+      const payableAmount = payableFeeRequests.reduce((sum, fee) => sum + Number(fee.amount || 0), 0);
+      if (!payableFeeRequests.length || payableAmount <= 0) {
+        res.status(400).json({ success: false, error: 'No pending processing fee request is available for payment.' });
+        return;
+      }
+      if (Math.round(Number(amount)) !== Math.round(payableAmount)) {
+        res.status(400).json({ success: false, error: `Processing fee payable amount is Rs ${payableAmount.toLocaleString('en-IN')}. Please refresh and try again.` });
+        return;
+      }
+      const lockedRequest = payableFeeRequests.find((fee) => fee.paymentReference && paymentSubmissions.some((payment) => payment.id === fee.paymentReference && payment.status === 'pending_verification'));
+      if (lockedRequest) {
+        res.status(409).json({ success: false, error: 'This processing fee request already has a payment pending verification.' });
+        return;
+      }
+      linkedFeeRequestIds.splice(0, linkedFeeRequestIds.length, ...payableFeeRequests.map((fee) => fee.id));
+    }
     const newPayment: any = {
       id: `PAY-2026-${Math.floor(1000 + Math.random() * 9000)}`,
       loanAccountId: loanAccountId || '',
@@ -1033,6 +1143,7 @@ export async function createApp({ serveClient = true }: CreateAppOptions = {}) {
       amount: Number(amount),
       purpose: paymentPurpose,
       installmentNumber: installmentNumber ? Number(installmentNumber) : 1,
+      feeRequestIds: linkedFeeRequestIds,
       upiIdUsed: settings.upiId,
       utrNumber,
       // Screenshot proof is optional - fabricating a stand-in image here would make
@@ -1068,6 +1179,12 @@ export async function createApp({ serveClient = true }: CreateAppOptions = {}) {
     if (paymentPurpose === 'processing_fee' && applicationId) {
       const appItem = applications.find((a) => a.id === applicationId);
       if (appItem) {
+        getApplicationFeeRequests(appItem).forEach((fee) => {
+          if (linkedFeeRequestIds.includes(fee.id) && fee.status === 'pending') {
+            fee.paymentReference = newPayment.id;
+            fee.updatedAt = newPayment.submittedAt;
+          }
+        });
         appItem.status = 'processing_fee_submitted';
         appItem.statusHistory.push({
           status: 'processing_fee_submitted',
@@ -1137,6 +1254,16 @@ export async function createApp({ serveClient = true }: CreateAppOptions = {}) {
         const appItem = applications.find((a) => a.id === pay.applicationId);
         if (appItem) {
           verifiedApplication = appItem;
+          const linkedFeeRequestIds = Array.isArray(pay.feeRequestIds) ? pay.feeRequestIds : [];
+          const feeRequests = getApplicationFeeRequests(appItem);
+          feeRequests.forEach((fee) => {
+            if ((linkedFeeRequestIds.length ? linkedFeeRequestIds.includes(fee.id) : fee.status === 'pending') && fee.status !== 'paid') {
+              fee.status = 'paid';
+              fee.paymentReference = pay.id;
+              fee.paidAt = pay.verifiedAt;
+              fee.updatedAt = pay.verifiedAt;
+            }
+          });
           appItem.status = 'payment_verified';
           appItem.statusHistory.push({
             status: 'payment_verified',
@@ -1213,6 +1340,21 @@ export async function createApp({ serveClient = true }: CreateAppOptions = {}) {
     } else {
       pay.status = 'rejected';
       pay.verificationNote = note || 'Invalid UTR or payment not reflected in bank account.';
+      if (pay.purpose === 'processing_fee' && pay.applicationId) {
+        const appItem = applications.find((a) => a.id === pay.applicationId);
+        if (appItem) {
+          const linkedFeeRequestIds = Array.isArray(pay.feeRequestIds) ? pay.feeRequestIds : [];
+          getApplicationFeeRequests(appItem).forEach((fee) => {
+            if ((linkedFeeRequestIds.length ? linkedFeeRequestIds.includes(fee.id) : fee.paymentReference === pay.id) && fee.status !== 'paid') {
+              fee.status = 'failed';
+              fee.paymentReference = pay.id;
+              fee.updatedAt = new Date().toISOString();
+            }
+          });
+          appItem.updatedAt = new Date().toISOString();
+          await saveApplication(appItem);
+        }
+      }
       addAuditLog('usr_admin_1', 'admin', 'admin@dhanifinance.in', 'PAYMENT_REJECTED', 'PaymentSubmission', pay.id, `Rejected payment UTR ${pay.utrNumber}`);
       addNotification({
         userId: pay.userId || 'usr_guest',

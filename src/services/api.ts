@@ -235,6 +235,15 @@ export const api = {
     return await res.json();
   },
 
+  async requestProcessingFees(id: string, fees: { feeType: string; description?: string; amount: number }[]): Promise<{ success: boolean; application?: LoanApplication; error?: string }> {
+    const res = await apiFetch(`/api/applications/${id}/request-processing-fee`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ fees }),
+    });
+    return await res.json();
+  },
+
   async getLoanAccounts(userId?: string): Promise<LoanAccount[]> {
     try {
       const url = userId ? `/api/loan-accounts?userId=${userId}` : '/api/loan-accounts';
@@ -257,6 +266,7 @@ export const api = {
     utrNumber: string;
     proofScreenshotUrl?: string;
     installmentNumber?: number;
+    feeRequestIds?: string[];
   }): Promise<{ success: boolean; payment?: PaymentSubmission; error?: string }> {
     const res = await apiFetch('/api/payments/submit', {
       method: 'POST',

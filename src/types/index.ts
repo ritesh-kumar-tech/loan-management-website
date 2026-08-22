@@ -188,6 +188,24 @@ export interface LoanApplication {
   
   createdAt: string;
   updatedAt: string;
+  feeRequests?: LoanFeeRequest[];
+}
+
+export interface LoanFeeRequest {
+  id: string;
+  loanId?: string;
+  applicationId: string;
+  customerId: string;
+  feeType: string;
+  description?: string;
+  amount: number;
+  status: 'draft' | 'pending' | 'paid' | 'failed' | 'cancelled';
+  paymentReference?: string;
+  requestedAt?: string;
+  paidAt?: string;
+  createdBy: string;
+  createdAt: string;
+  updatedAt: string;
 }
 
 export interface Installment {
@@ -235,6 +253,7 @@ export interface PaymentSubmission {
   amount: number;
   purpose: 'emi' | 'processing_fee' | 'foreclosure' | 'late_fee';
   installmentNumber?: number;
+  feeRequestIds?: string[];
   upiIdUsed: string;
   utrNumber: string;
   proofScreenshotUrl?: string;

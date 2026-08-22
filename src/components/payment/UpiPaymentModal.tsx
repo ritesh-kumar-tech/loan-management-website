@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { api } from '../../services/api';
 import { CompanySettings, PaymentSubmission } from '../../types';
 import { formatINR } from '../../utils/calculator';
+import { createQrCodeImageUrl, createUpiPaymentUrl } from '../../utils/upiPayment';
 import { Copy, Check, Upload, AlertCircle, X, Smartphone, FileCheck, Landmark } from 'lucide-react';
 
 interface UpiPaymentModalProps {
@@ -13,6 +14,7 @@ interface UpiPaymentModalProps {
   amountPayable: number;
   purpose?: 'emi' | 'processing_fee';
   installmentNumber?: number;
+  feeRequestIds?: string[];
   onClose: () => void;
   onPaymentSubmitted: (payment: PaymentSubmission) => void;
 }
@@ -26,6 +28,7 @@ export const UpiPaymentModal: React.FC<UpiPaymentModalProps> = ({
   amountPayable,
   purpose = 'emi',
   installmentNumber,
+  feeRequestIds,
   onClose,
   onPaymentSubmitted,
 }) => {
@@ -37,6 +40,15 @@ export const UpiPaymentModal: React.FC<UpiPaymentModalProps> = ({
   const [uploadingProof, setUploadingProof] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [upiOpenMessage, setUpiOpenMessage] = useState<string | null>(null);
+  const payeeName = settings.collectionAccountHolderName || settings.upiAccountName || settings.companyName;
+  const upiPayment = createUpiPaymentUrl({
+    upiId: settings.upiId,
+    payeeName,
+    amount: amountPayable,
+    transactionNote: 'Loan Repayment',
+  });
+  const upiQrCodeUrl = upiPayment ? createQrCodeImageUrl(upiPayment.upiUrl, 250) : '';
 
   const handleProofFileSelect = async (file: File) => {
     setError(null);
@@ -56,7 +68,7 @@ export const UpiPaymentModal: React.FC<UpiPaymentModalProps> = ({
   };
 
   const handleCopyUpi = () => {
-    navigator.clipboard.writeText(settings.upiId);
+    navigator.clipboard.writeText(upiPayment?.normalizedUpiId || settings.upiId.trim());
     setCopiedUpi(true);
     setTimeout(() => setCopiedUpi(false), 2000);
   };
@@ -72,6 +84,23 @@ export const UpiPaymentModal: React.FC<UpiPaymentModalProps> = ({
     navigator.clipboard.writeText(value);
     setCopiedBankField(label);
     setTimeout(() => setCopiedBankField(null), 2000);
+  };
+
+  const handleOpenUpiApp = () => {
+    setUpiOpenMessage(null);
+
+    if (!upiPayment) {
+      setUpiOpenMessage('UPI payment link cannot be generated. Please check the configured UPI ID, payee name, and repayment amount.');
+      return;
+    }
+
+    window.location.href = upiPayment.upiUrl;
+
+    window.setTimeout(() => {
+      if (document.visibilityState === 'visible') {
+        setUpiOpenMessage('Unable to open a UPI app. Please scan the QR code or copy the UPI ID and pay manually.');
+      }
+    }, 1800);
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -95,6 +124,7 @@ export const UpiPaymentModal: React.FC<UpiPaymentModalProps> = ({
         utrNumber: utrNumber.trim().toUpperCase(),
         proofScreenshotUrl: proofUrl || undefined,
         installmentNumber,
+        feeRequestIds,
       });
 
       if (res.success && res.payment) {
@@ -108,8 +138,6 @@ export const UpiPaymentModal: React.FC<UpiPaymentModalProps> = ({
       setSubmitting(false);
     }
   };
-
-  const upiDeepLink = `upi://pay?pa=${encodeURIComponent(settings.upiId)}&pn=${encodeURIComponent(settings.upiAccountName)}&am=${amountPayable}&cu=INR&tn=${encodeURIComponent(`EMI Payment ${applicationId}`)}`;
 
   return (
     <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 overflow-y-auto">
@@ -152,7 +180,7 @@ export const UpiPaymentModal: React.FC<UpiPaymentModalProps> = ({
             <div className="text-center sm:text-left space-y-3">
               <span className="text-xs font-bold text-slate-500 uppercase tracking-wider block">Official Company UPI VPA</span>
               <div className="bg-white p-2.5 rounded-xl border border-slate-300 font-mono text-sm font-bold text-slate-900 flex items-center justify-between gap-2">
-                <span className="truncate">{settings.upiId}</span>
+                <span className="truncate">{upiPayment?.normalizedUpiId || settings.upiId}</span>
                 <button
                   onClick={handleCopyUpi}
                   title="Copy UPI VPA"
@@ -162,24 +190,42 @@ export const UpiPaymentModal: React.FC<UpiPaymentModalProps> = ({
                 </button>
               </div>
               <p className="text-xs text-slate-500 font-medium">
-                Account Holder: <strong className="text-slate-800">{settings.upiAccountName}</strong>
+                Account Holder: <strong className="text-slate-800">{upiPayment?.normalizedPayeeName || payeeName || 'Not configured'}</strong>
               </p>
 
-              <a
-                href={upiDeepLink}
-                className="w-full py-2.5 px-4 rounded-xl bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold flex items-center justify-center gap-2 transition-all shadow-xs"
+              <button
+                type="button"
+                onClick={handleOpenUpiApp}
+                disabled={!upiPayment}
+                className="w-full py-2.5 px-4 rounded-xl bg-slate-900 hover:bg-slate-800 disabled:bg-slate-400 disabled:cursor-not-allowed text-white text-xs font-bold flex items-center justify-center gap-2 transition-all shadow-xs"
               >
                 <Smartphone className="w-4 h-4 text-emerald-400" /> Open in Google Pay / PhonePe
-              </a>
+              </button>
+              {upiOpenMessage && (
+                <p className="text-[11px] text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+                  {upiOpenMessage}
+                </p>
+              )}
+              {!upiPayment && (
+                <p className="text-[11px] text-rose-700 bg-rose-50 border border-rose-200 rounded-lg px-3 py-2">
+                  Invalid UPI payment configuration. Verify the VPA is active and formatted like name@bank, then try again.
+                </p>
+              )}
             </div>
 
             {/* QR Code */}
             <div className="flex flex-col items-center justify-center bg-white p-3 rounded-xl border border-slate-200">
-              <img
-                src={settings.upiQrCodeUrl}
-                alt="Company UPI QR"
-                className="w-36 h-36 object-contain"
-              />
+              {upiPayment ? (
+                <img
+                  src={upiQrCodeUrl}
+                  alt="Company UPI QR"
+                  className="w-36 h-36 object-contain"
+                />
+              ) : (
+                <div className="w-36 h-36 rounded-xl bg-slate-100 border border-slate-200 flex items-center justify-center p-3 text-center text-[11px] font-semibold text-slate-500">
+                  QR unavailable until UPI details are valid.
+                </div>
+              )}
               <span className="text-[10px] text-slate-400 font-medium mt-1">Scan using any UPI App</span>
             </div>
           </div>

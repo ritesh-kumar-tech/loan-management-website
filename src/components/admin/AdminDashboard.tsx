@@ -268,7 +268,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ settings, onUpda
       );
     }
     if (activeSection === 'customers') return <CustomerManagementView customers={customers} applications={applications} loanAccounts={loanAccounts} onSaveCustomer={handleSaveCustomer} />;
-    if (activeSection === 'applications') return <ApplicationManagementView applications={applications} settings={settings} onUpdateStatus={handleUpdateApplicationStatus} onVerifyDocument={handleVerifyDocument} />;
+    if (activeSection === 'applications') return <ApplicationManagementView applications={applications} settings={settings} onUpdateStatus={handleUpdateApplicationStatus} onVerifyDocument={handleVerifyDocument} onRefresh={() => loadData(true)} />;
     if (activeSection === 'loans') return <LoanManagementView loanAccounts={loanAccounts} settings={settings} onAdjustLoan={handleAdjustLoan} />;
     if (activeSection === 'documents') return <DocumentVerificationView applications={applications} onVerifyDocument={handleVerifyDocument} />;
     if (activeSection === 'payments') return <PaymentVerificationView payments={payments} onVerifyPayment={handleVerifyPayment} />;
